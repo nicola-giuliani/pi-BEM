@@ -58,37 +58,7 @@
 #include <deal2lkit/parsed_data_out.h>
 #include <deal2lkit/utilities.h>
 
-/**
-* - BoundaryCondition. The class handles the boundary conditions. In particular
-*   - it reads the boundary conditions for the potential and its normal derivative;
-*   - given the peculiarities of the BEM, the boundary conditions represent the actual unknowns, thus it creates the vectors containing the variables and fills them with the proper data;
-*   - it performs the error analysis on both unknowns.
-*/
-template <int dim>
-class BoundaryConditions : public ParameterAcceptor
-{
-public:
-  BoundaryConditions(ComputationalDomain<dim> &comp_dom, BEMProblem<dim> &bem, const MPI_Comm comm = MPI_COMM_WORLD) :
-    wind(dim), comp_dom(comp_dom), bem(bem),
-    mpi_communicator (comm),
-    n_mpi_processes (Utilities::MPI::n_mpi_processes(mpi_communicator)),
-    this_mpi_process (Utilities::MPI::this_mpi_process(mpi_communicator)),
-    pcout(std::cout,
-          (this_mpi_process
-           == 0)),
-    data_out_scalar("Scalar data out", "vtu"),
-    data_out_vector("Vector data out", "vtu")
-  {
-    dofs_number = 0,
-    output_frequency = 1;
-  }
-
-
-
-
-};
-
-using namespace dealii;
+ing namespace dealii;
 using namespace deal2lkit;
 
 template <int dim, typename VEC = TrilinosWrappers::MPI::Vector>
@@ -200,6 +170,8 @@ private:
   TrilinosWrappers::MPI::Vector        tmp_rhs;
   TrilinosWrappers::MPI::Vector        phi;
   TrilinosWrappers::MPI::Vector        dphi_dn;
+  TrilinosWrappers::MPI::Vector        phi_dot;
+  TrilinosWrappers::MPI::Vector        dphi_dn_dot;
 
   MPI_Comm mpi_communicator;
 
@@ -210,6 +182,12 @@ private:
   bool have_dirichlet_bc;
 
   IndexSet this_cpu_set;
+  IndexSet neumann_set;
+  IndexSet dirichlet_set;
+  IndexSet neumann_dot_set;
+  IndexSet dirichlet_dot_set;
+  IndexSet dirichlet_set_bem;
+  IndexSet dirichlet_set_bem;
 
   ConditionalOStream pcout;
 

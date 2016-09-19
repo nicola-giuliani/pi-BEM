@@ -11,18 +11,6 @@ RCP<Time> ErrorsTime = Teuchos::TimeMonitor::getNewTimer("Errors");
 RCP<Time> OutputTimer = Teuchos::TimeMonitor::getNewTimer("Output");
 RCP<Time> ResidualTimer = Teuchos::TimeMonitor::getNewTimer("Residual");
 
-template <int dim, typename VEC>
-DAEBEM<dim, VEC>::DAEBEM(BEMProblem<dim> &bem, const MPI_Comm comm)
-  :
-  pcout(std::cout),
-  bem(bem),
-  mpi_communicator (comm),
-  this_mpi_process (Utilities::MPI::this_mpi_process(mpi_communicator)),
-  n_mpi_processes (Utilities::MPI::n_mpi_processes(mpi_communicator)),
-{
-  // Only output on first processor.
-  pcout.set_condition(this_mpi_process == 0);
-}
 
 
 template <int dim, typename VEC>
@@ -39,10 +27,56 @@ int
 DAEBEM<dim, VEC>::residual(const double t,
                                       const VEC &solution,
                                       const VEC &solution_dot,
-                                      typename VEC &dst)
+                                      VEC &dst)
 {
   Teuchos::TimeMonitor LocalTimer(*ResidualTimer);
 
+  // spacchetto phi e phin tanto lui se lo gestisce;
+  // prendo solution e lo copio e lo giro a bem problem;
+  // bem.solve()//con phi e phin spacchettate phi_bem, phin_bem
+  // solution - condizioni esatte se e' algebrico
+  // solution_dot - dot_esatto se e' differenziale
+
+
+  TrilinosWrappers::MPI::Vector phi_bem(solution.block(1));
+  TrilinosWrappers::MPI::Vector dphi_dn_bem(solution.block(0));
+  // settare i dirichlet/neumann bem
+  TrilinosWrappers::MPI::Vector tmp_rhs_bem(this_cpu_set, mpi_communicator);
+  for(auto i : neumann_set_bem)
+  {
+    tmp_rhs_bem[i]=solution.block(0)[i]
+  }
+  for(auto i : dirichlet_set_bem)
+  {
+    tmp_rhs_bem[i]=solution.block(1)[i]
+  }
+
+  bem.solve(phi_bem, dphi_dn_bem, tmp_rhs_bem);
+
+  for(auto i : dirichlet_set)
+  {
+    dst.block(1)[i]=solution.block(1)[i]-phi_exact[i];
+  }
+  for(auto i : neumann_set_bem)
+  {
+    dst.block(i)[i]=solution.block(1)[i]-phi_bem[i];
+  }
+  for(auto i : dirichlet_dot_set)
+  {
+
+  }
+  for(auto i : neumann_set)
+  {
+    dst.block(0)[i]=solution.block(0)[i]-dphi_dn_exact[i];
+  }
+  for(auto i : dirichlet_set_bem)
+  {
+    dst.block(i)[i]=solution.block(0)[i]-dphi_dn_bem[i];
+  }
+  for(auto i : neumann_dot_set)
+  {
+    
+  }
 
 
 
@@ -54,7 +88,7 @@ DAEBEM<dim, VEC>::residual(const double t,
 
 
 
-template <int dim>
+template <int dim, typename VEC>
 void DAEBEM<dim, VEC>::declare_parameters(ParameterHandler &prm)
 {
 
@@ -91,7 +125,7 @@ void DAEBEM<dim, VEC>::declare_parameters(ParameterHandler &prm)
 
 }
 
-template <int dim>
+template <int dim, typename VEC>
 void DAEBEM<dim, VEC>::parse_parameters(ParameterHandler &prm)
 {
 
@@ -116,7 +150,7 @@ void DAEBEM<dim, VEC>::parse_parameters(ParameterHandler &prm)
 
 
 
-/*template <int dim>
+/*template <int dim, typename VEC>
 double* DAEBEM<dim, VEC>::initial_conditions() {
 
   initial_wave_shape.set_time(initial_time);
@@ -177,7 +211,7 @@ double* DAEBEM<dim, VEC>::initial_conditions() {
 
 
 
-template <int dim>
+template <int dim, typename VEC>
 void DAEBEM<dim, VEC>::solve_problem()
 {
 
@@ -210,38 +244,22 @@ void DAEBEM<dim, VEC>::solve_problem()
 
 }
 
-template <int dim>
+template <int dim, typename VEC>
 const TrilinosWrappers::MPI::Vector &DAEBEM<dim, VEC>::get_phi()
 {
   return phi;
 }
 
-template <int dim>
+template <int dim, typename VEC>
 const TrilinosWrappers::MPI::Vector &DAEBEM<dim, VEC>::get_dphi_dn()
 {
   return dphi_dn;
 }
 
 
-
-template <int dim>
-void DAEBEM<dim, VEC>::prepare_bem_vectors()
+template <int dim, typename VEC>
+void DAEBEM<dim, vec>::compute_dae_cache()
 {
-  Teuchos::TimeMonitor LocalTimer(*PrepareTime);
-  // bem.compute_normals();
-  const types::global_dof_index n_dofs =  bem.dh.n_dofs();
-
-  phi.reinit(this_cpu_set,mpi_communicator);
-  dphi_dn.reinit(this_cpu_set,mpi_communicator);
-  // tmp_rhs.reinit(this_cpu_set,mpi_communicator);
-
-
-  std::vector<Point<dim> > support_points(n_dofs);
-  DoFTools::map_dofs_to_support_points<dim-1, dim>( *bem.mapping, bem.dh, support_points);
-
-  std::vector<Point<dim> > vec_support_points(bem.gradient_dh.n_dofs());
-  DoFTools::map_dofs_to_support_points<dim-1, dim>( *bem.mapping, bem.gradient_dh, vec_support_points);
-
   cell_it
   cell = bem.dh.begin_active(),
   endc = bem.dh.end();
@@ -255,78 +273,112 @@ void DAEBEM<dim, VEC>::prepare_bem_vectors()
                            update_JxW_values);
 
 
-  have_dirichlet_bc = false;
   for (cell = bem.dh.begin_active(); cell != endc; ++cell)
-    {
-      fe_v.reinit(cell);
-      cell->get_dof_indices(local_dof_indices);
-      //const std::vector<Point<dim> > &node_normals = fe_v.get_cell_normal_vectors();////provv
-      for (unsigned int j=0; j<bem.fe->dofs_per_cell; ++j)
-        if (this_cpu_set.is_element(local_dof_indices[j]))
+  {
+    cell->get_dof_indices(local_dof_indices);
+      if(cell->material_id == 0)// Neumann node
+      {
+        for (unsigned int j=0; j<bem.fe->dofs_per_cell; ++j)
+          if(bem.this_cpu_set.is_element(j))
           {
-            //bem.pcout<<cell<<" "<<cell->material_id()<<" ("<<node_normals[0]<<") "<<-normals_sys_solution(local_dof_indices[j])<<std::endl;
-            bool dirichlet = false;
-            bool neumann = false;
-            for (auto dbound : comp_dom.dirichlet_boundary_ids)
-              if (cell->material_id() == dbound)
-                {
-                  dirichlet = true;
-                  have_dirichlet_bc = true;
-                  break;
-                }
-            if (dirichlet)
-              {
-                //tmp_rhs(local_dof_indices[j]) = node_coors[j](0);
-                phi(local_dof_indices[j]) = potential.value(support_points[local_dof_indices[j]]);
-                tmp_rhs(local_dof_indices[j]) = potential.value(support_points[local_dof_indices[j]]);
-                //bem.pcout<<"internalElse "<<local_dof_indices[j]<<" norm ("<<node_normals[j]<<")  "<<" pos ("<<node_coors[j]<<")    "<<node_coors[j](0)<<std::endl;
-              }
-            else
-              {
-                for (auto nbound : comp_dom.neumann_boundary_ids)
-                  if (cell->material_id() == nbound)
-                    {
-                      neumann = true;
-                      break;
-                    }
-
-                if (neumann)
-                  {
-                    //tmp_rhs(local_dof_indices[j]) = normals_sys_solution(local_dof_indices[j]);
-                    //dphi_dn(local_dof_indices[j]) = normals_sys_solution(local_dof_indices[j]);
-                    Vector<double> imposed_pot_grad(dim);
-                    wind.vector_value(support_points[local_dof_indices[j]],imposed_pot_grad);
-                    // Point<dim> imposed_potential_gradient;
-                    double tmp_dphi_dn = 0;
-                    double normy = 0;
-                    double tol = 1e-1;
-                    for (unsigned int d=0; d<dim; ++d)
-                      {
-                        types::global_dof_index dummy = bem.sub_wise_to_original[local_dof_indices[j]];
-                        types::global_dof_index vec_index = bem.vec_original_to_sub_wise[bem.gradient_dh.n_dofs()/dim*d+dummy];//bem.vector_start_per_process[this_mpi_process] + d*bem.this_cpu_set.n_elements() + local_dof_indices[j]-bem.start_per_process[this_mpi_process];//bem.gradient_dh.n_dofs()/dim*d+local_dof_indices[j];//bem.vector_start_per_process[this_mpi_process]+((local_dof_indices[j]-bem.start_per_process[this_mpi_process])*dim+d); //local_dof_indices[j]*dim+d;
-                        // std::cout<<this_mpi_process<<" "<<support_points[local_dof_indices[j]]<<" "<<vec_support_points[vec_index]<<std::endl;
-                        Assert(bem.vector_this_cpu_set.is_element(vec_index), ExcMessage("vector cpu set and cpu set are inconsistent"));
-                        // Assert(support_points[local_dof_indices[j]]==vec_support_points[vec_index], ExcMessage("the support points of dh and gradient_dh are different"));
-                        tmp_dphi_dn += imposed_pot_grad[d]*bem.vector_normals_solution[vec_index];
-                        normy += bem.vector_normals_solution[vec_index] * bem.vector_normals_solution[vec_index];
-                      }
-                    Assert(std::fabs(normy-1.)<tol, ExcMessage("you are using wrongly the normal vector"));
-                    tmp_rhs(local_dof_indices[j]) = tmp_dphi_dn;
-                    dphi_dn(local_dof_indices[j]) = tmp_dphi_dn;
-                  }
-                else
-                  {
-                    tmp_rhs(local_dof_indices[j]) = 0;
-                    dphi_dn(local_dof_indices[j]) = 0;
-                  }
-              }
-
+            algebraic_set.add_index(j);
+            neumann_set.add_index(j);
+            neumann_set_bem.add_index(j);
           }
-    }
+      }
+      else if(cell->material_id == 1)//Dirichlet node
+      {
+        for (unsigned int j=0; j<bem.fe->dofs_per_cell; ++j)
+          if(bem.this_cpu_set.is_element(j))
+          {
+            algebraic_set.add_index(j);
+            dirichlet_set.add_index(j);
+            dirichlet_set_bem.add_index(j);
+          }
+
+      }
+      else if(cell->material_id == 2)//Neumann differential node
+      {
+        for (unsigned int j=0; j<bem.fe->dofs_per_cell; ++j)
+          if(bem.this_cpu_set.is_element(j))
+          {
+            differential_set.add_index(j);
+            neumann_set_bem.add_index(j);
+            neumann_dot_set.add_index(j);
+          }
+
+      }
+      else if(cell->material_id == 3)//Dirichlet differential node
+      {
+        for (unsigned int j=0; j<bem.fe->dofs_per_cell; ++j)
+          if(bem.this_cpu_set.is_element(j))
+          {
+            differential_set.add_index(j);
+            dirichlet_set_bem.add_index(j);
+            dirichlet_dot_set.add_index(j);
+          }
+
+      }
+
+  }
 
 }
 
-template <int dim>
+template <int dim, typename VEC>
+void DAEBEM<dim, VEC>::prepare_bem_vectors()
+{
+  Teuchos::TimeMonitor LocalTimer(*PrepareTime);
+  // bem.compute_normals();
+  const types::global_dof_index n_dofs =  bem.dh.n_dofs();
+
+  phi.reinit(this_cpu_set,mpi_communicator);
+  dphi_dn.reinit(this_cpu_set,mpi_communicator);
+  phi_dot.reinit(this_cpu_set,mpi_communicator);
+  dphi_dn_dot.reinit(this_cpu_set,mpi_communicator);
+  // tmp_rhs.reinit(this_cpu_set,mpi_communicator);
+
+
+  std::vector<Point<dim> > support_points(n_dofs);
+  DoFTools::map_dofs_to_support_points<dim-1, dim>( *bem.mapping, bem.dh, support_points);
+
+  std::vector<Point<dim> > vec_support_points(bem.gradient_dh.n_dofs());
+  DoFTools::map_dofs_to_support_points<dim-1, dim>( *bem.mapping, bem.gradient_dh, vec_support_points);
+
+  cell_it
+  cell = bem.dh.begin_active(),
+  endc = bem.dh.end();
+
+  for(auto i : dirichlet_set)
+  {
+    phi[i] = potential.value(support_points[i]);
+  }
+  for(auto i : neumann_set)
+  {
+    Vector<double> imposed_pot_grad(dim);
+    wind.vector_value(support_points[i],imposed_pot_grad);
+    dphi_dn[i]=0.;
+    types::global_dof_index dummy = bem.sub_wise_to_original[i];
+    for(unsigned int d=0; d<dim; ++d)
+    {
+      types::global_dof_index vec_index = bem.vec_original_to_sub_wise[bem.gradient_dh.n_dofs()/dim*d+dummy];//bem.vector_start_per_process[this_mpi_process] + d*bem.this_cpu_set.n_elements() + local_dof_indices[j]-bem.start_per_process[this_mpi_process];//bem.gradient_dh.n_dofs()/dim*d+local_dof_indices[j];//bem.vector_start_per_process[this_mpi_process]+((local_dof_indices[j]-bem.start_per_process[this_mpi_process])*dim+d); //local_dof_indices[j]*dim+d;
+      // std::cout<<this_mpi_process<<" "<<support_points[local_dof_indices[j]]<<" "<<vec_support_points[vec_index]<<std::endl;
+      Assert(bem.vector_this_cpu_set.is_element(vec_index), ExcMessage("vector cpu set and cpu set are inconsistent"));
+      // Assert(support_points[local_dof_indices[j]]==vec_support_points[vec_index], ExcMessage("the support points of dh and gradient_dh are different"));
+      dphi_dn[i] += imposed_pot_grad[d]*bem.vector_normals_solution[vec_index];
+    }
+  }
+  for(auto i : dirichlet_dot_set)
+  {
+    //????? do something
+  }
+  for(auto i : neumann_dot_set)
+  {
+    //???? do something
+  }
+
+}
+
+template <int dim, typename VEC>
 void DAEBEM<dim, VEC>::compute_errors()
 {
   Teuchos::TimeMonitor LocalTimer(*ErrorsTime);
@@ -490,7 +542,7 @@ void DAEBEM<dim, VEC>::compute_errors()
     }
 }
 
-template <int dim>
+template <int dim, typename VEC>
 void DAEBEM<dim, VEC>::output_results(const std::string filename)
 {
   Teuchos::TimeMonitor LocalTimer(*OutputTimer);
