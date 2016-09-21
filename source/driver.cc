@@ -21,7 +21,8 @@ Driver<dim>::Driver() :
   mpi_communicator (MPI_COMM_WORLD),
   computational_domain(mpi_communicator),
   bem_problem(computational_domain,mpi_communicator),
-  boundary_conditions(computational_domain, bem_problem),
+  boundary_conditions(computational_domain, bem_problem, mpi_communicator),
+  dae_bem(computational_domain, bem_problem, mpi_communicator),
   prm(),
   n_mpi_processes (Utilities::MPI::n_mpi_processes(mpi_communicator)),
   this_mpi_process (Utilities::MPI::this_mpi_process(mpi_communicator))

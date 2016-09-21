@@ -1,9 +1,6 @@
 #ifndef __DAEBEM_h_
 #define __DAEBEM_h_
 
-#include <deal2lkit/ida_interface.h>
-#include <deal2lkit/imex_stepper.h>
-#include <deal2lkit/parsed_zero_average_constraints.h>
 
 #include<deal.II/base/smartpointer.h>
 #include<deal.II/base/convergence_table.h>
@@ -19,6 +16,7 @@
 #include<deal.II/lac/solver_control.h>
 #include<deal.II/lac/solver_gmres.h>
 #include<deal.II/lac/precondition.h>
+#include <deal.II/lac/linear_operator.h>
 
 #include<deal.II/grid/tria.h>
 #include<deal.II/grid/tria_iterator.h>
@@ -55,18 +53,27 @@
 #include "../include/bem_problem.h"
 #include "../include/computational_domain.h"
 
+#include <deal2lkit/ida_interface.h>
+#include <deal2lkit/parsed_function.h>
+#include <deal2lkit/imex_stepper.h>
+#include <deal2lkit/parsed_zero_average_constraints.h>
 #include <deal2lkit/parsed_data_out.h>
 #include <deal2lkit/utilities.h>
 
-ing namespace dealii;
+using namespace dealii;
 using namespace deal2lkit;
 
-template <int dim, typename VEC = TrilinosWrappers::MPI::Vector>
-class DAEBEM : public ParameterAcceptor, public IDAInterface<VEC>
-{
 
-  DAEBEM(BEMProblem<dim> &bem, const MPI_Comm comm = MPI_COMM_WORLD);
-    wind(dim), comp_dom(comp_dom), bem(bem),
+template <int dim>
+class DAEBEM : public IDAInterface<TrilinosWrappers::MPI::BlockVector>
+{
+  public:
+  DAEBEM(ComputationalDomain<dim> &comp_dom, BEMProblem<dim> &bem, const MPI_Comm comm = MPI_COMM_WORLD):
+    potential_gradient("Potential gradient",dim,"t;1;1"),
+    potential_gradient_dot("Potential gradient time derivative",dim,"1;0;0"),
+    potential("Potential",1,"t*x+y+z"),
+    potential_dot("Potential time derivative",1,"x"),
+    comp_dom(comp_dom), bem(bem),
     mpi_communicator (comm),
     n_mpi_processes (Utilities::MPI::n_mpi_processes(mpi_communicator)),
     this_mpi_process (Utilities::MPI::this_mpi_process(mpi_communicator)),
@@ -81,7 +88,7 @@ class DAEBEM : public ParameterAcceptor, public IDAInterface<VEC>
   }
 
 
-  virtual shared_ptr<VEC>
+  virtual shared_ptr<TrilinosWrappers::MPI::BlockVector>
   create_new_vector() const;
 
   /** Check the behaviour of the solution. If it
@@ -92,32 +99,32 @@ class DAEBEM : public ParameterAcceptor, public IDAInterface<VEC>
   virtual bool solver_should_restart(const double t,
                                      const unsigned int step_number,
                                      const double h,
-                                     VEC &solution,
-                                     VEC &solution_dot);
+                                     TrilinosWrappers::MPI::BlockVector &solution,
+                                     TrilinosWrappers::MPI::BlockVector &solution_dot);
 
   /** For dae problems, we need a
    residual function. */
   virtual int residual(const double t,
-                       const VEC &src_yy,
-                       const VEC &src_yp,
-                       VEC &dst);
+                       const TrilinosWrappers::MPI::BlockVector &src_yy,
+                       const TrilinosWrappers::MPI::BlockVector &src_yp,
+                       TrilinosWrappers::MPI::BlockVector &dst);
 
   /** Setup Jacobian system and preconditioner. */
   virtual int setup_jacobian(const double t,
-                             const VEC &src_yy,
-                             const VEC &src_yp,
-                             const VEC &residual,
+                             const TrilinosWrappers::MPI::BlockVector &src_yy,
+                             const TrilinosWrappers::MPI::BlockVector &src_yp,
+                             const TrilinosWrappers::MPI::BlockVector &residual,
                              const double alpha);
 
 
   /** Inverse of the Jacobian vector product. */
-  virtual int solve_jacobian_system(const double t,
-                                    const VEC &y,
-                                    const VEC &y_dot,
-                                    const VEC &residual,
-                                    const double alpha,
-                                    const VEC &src,
-                                    VEC &dst) const;
+  virtual int solve_jacobian_system(//const double t,
+                                    //const TrilinosWrappers::MPI::BlockVector &y,
+                                    //const TrilinosWrappers::MPI::BlockVector &y_dot,
+                                    //const TrilinosWrappers::MPI::BlockVector &residual,
+                                    //const double alpha,
+                                    const TrilinosWrappers::MPI::BlockVector &src,
+                                    TrilinosWrappers::MPI::BlockVector &dst) const;
 
   /** And an identification of the
    differential components. This
@@ -125,8 +132,9 @@ class DAEBEM : public ParameterAcceptor, public IDAInterface<VEC>
    corresponding variable is a
    differential component, zero
    otherwise.  */
-  virtual VEC &differential_components() const;
+  virtual TrilinosWrappers::MPI::BlockVector &differential_components() const;
 
+  void compute_dae_cache();
 
   typedef typename DoFHandler<dim-1,dim>::active_cell_iterator cell_it;
 
@@ -134,7 +142,7 @@ class DAEBEM : public ParameterAcceptor, public IDAInterface<VEC>
 
   virtual void parse_parameters(ParameterHandler &prm);
 
-  void prepare_bem_vectors();
+  void prepare_bem_vectors(double t);
 
   void solve_problem();
 
@@ -151,9 +159,13 @@ class DAEBEM : public ParameterAcceptor, public IDAInterface<VEC>
 
 private:
 
-  Functions::ParsedFunction<dim> wind;
+  ParsedFunction<dim> potential_gradient;
 
-  Functions::ParsedFunction<dim> potential;
+  ParsedFunction<dim> potential;
+
+  ParsedFunction<dim> potential_gradient_dot;
+
+  ParsedFunction<dim> potential_dot;
 
   std::string node_displacement_type;
 
@@ -173,49 +185,59 @@ private:
   TrilinosWrappers::MPI::Vector        phi_dot;
   TrilinosWrappers::MPI::Vector        dphi_dn_dot;
 
-  MPI_Comm mpi_communicator;
+  const MPI_Comm mpi_communicator;
 
   unsigned int n_mpi_processes;
-
   unsigned int this_mpi_process;
 
   bool have_dirichlet_bc;
 
+  std::vector<IndexSet> this_cpu_set_complete;
+  std::vector<IndexSet> this_cpu_set_double;
   IndexSet this_cpu_set;
   IndexSet neumann_set;
   IndexSet dirichlet_set;
   IndexSet neumann_dot_set;
   IndexSet dirichlet_dot_set;
   IndexSet dirichlet_set_bem;
-  IndexSet dirichlet_set_bem;
+  IndexSet neumann_set_bem;
+  IndexSet algebraic_set;
+  IndexSet differential_set;
+
+  bool jacobian_direct_resolution;
 
   ConditionalOStream pcout;
 
   ParsedDataOut<dim-1, dim> data_out_scalar;
   ParsedDataOut<dim-1, dim> data_out_vector;
 
-  BEMProblem<dim> &bem;
+  BlockSparsityPattern jacobian_sparsity;
+  TrilinosWrappers::BlockSparseMatrix jacobian_matrix;
+  // TrilinosWrappers::BlockSparseMatrix jacobian_preconditioner_op;
+  TrilinosWrappers::BlockSparseMatrix jacobian_preconditioner_matrix;
 
-  unsigned int this_mpi_process, n_mpi_processes;
+  IDAInterface<TrilinosWrappers::MPI::BlockVector> ida;
+
+  double jacobian_solver_tolerance;
   /**
    * solution at current time step
    */
-  VEC        solution;
+  TrilinosWrappers::MPI::BlockVector        solution;
 
   /**
    * solution_dot at current time step
    */
-  VEC        solution_dot;
+  TrilinosWrappers::MPI::BlockVector        solution_dot;
 
   /**
    * distributed solution at current time step
    */
-  mutable VEC        locally_relevant_solution;
+  mutable TrilinosWrappers::MPI::BlockVector        locally_relevant_solution;
 
   /**
    * distributed solution_dot at current time step
    */
-  mutable VEC        locally_relevant_solution_dot;
+  mutable TrilinosWrappers::MPI::BlockVector        locally_relevant_solution_dot;
 
   /**
    * current time
@@ -227,11 +249,10 @@ private:
    */
   double current_alpha;
 
-  const MPI_Comm mpi_communicator;
 
 
 
 
-}
+};
 
 #endif

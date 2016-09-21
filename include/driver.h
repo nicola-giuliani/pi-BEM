@@ -62,6 +62,7 @@
 #include "bem_problem.h"
 #include "bem_fma.h"
 #include "boundary_conditions.h"
+#include "dae_bem.h"
 #include "computational_domain.h"
 #include <deal2lkit/parameter_acceptor.h>
 using namespace dealii;
@@ -105,6 +106,8 @@ private:
   BEMProblem<dim> bem_problem;
 
   BoundaryConditions<dim> boundary_conditions;
+
+  DAEBEM<dim> dae_bem;
 
   ParameterHandler prm;
 
