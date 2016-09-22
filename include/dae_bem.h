@@ -52,7 +52,7 @@
 
 #include "../include/bem_problem.h"
 #include "../include/computational_domain.h"
-
+#include "../include/dae_lambdas.h"
 #include <deal2lkit/ida_interface.h>
 #include <deal2lkit/parsed_function.h>
 #include <deal2lkit/imex_stepper.h>
@@ -97,8 +97,6 @@ class DAEBEM : public ParameterAcceptor
    * calculation will be continued. If necessary, it can also reset
    * the time stepper. */
   virtual bool solver_should_restart(const double t,
-                                     const unsigned int step_number,
-                                     const double h,
                                      TrilinosWrappers::MPI::BlockVector &solution,
                                      TrilinosWrappers::MPI::BlockVector &solution_dot);
 
@@ -113,17 +111,18 @@ class DAEBEM : public ParameterAcceptor
   virtual int setup_jacobian(const double t,
                              const TrilinosWrappers::MPI::BlockVector &src_yy,
                              const TrilinosWrappers::MPI::BlockVector &src_yp,
-                             const TrilinosWrappers::MPI::BlockVector &residual,
                              const double alpha);
 
+  virtual void output_step(const double t,
+                           const TrilinosWrappers::MPI::BlockVector &solution,
+                           const TrilinosWrappers::MPI::BlockVector &solution_dot,
+                           const unsigned int step_number);
+
+  virtual int jacobian_vmult(const TrilinosWrappers::MPI::BlockVector &src,
+                        TrilinosWrappers::MPI::BlockVector &dst) const;
 
   /** Inverse of the Jacobian vector product. */
-  virtual int solve_jacobian_system(//const double t,
-                                    //const TrilinosWrappers::MPI::BlockVector &y,
-                                    //const TrilinosWrappers::MPI::BlockVector &y_dot,
-                                    //const TrilinosWrappers::MPI::BlockVector &residual,
-                                    //const double alpha,
-                                    const TrilinosWrappers::MPI::BlockVector &src,
+  virtual int solve_jacobian_system(const TrilinosWrappers::MPI::BlockVector &src,
                                     TrilinosWrappers::MPI::BlockVector &dst) const;
 
   /** And an identification of the
@@ -150,9 +149,7 @@ class DAEBEM : public ParameterAcceptor
 
   void compute_errors();
 
-  void set_functions_to_default();
-  
-  void jacobian_vmult(const TrilinosWrappers::MPI::BlockVector &src, TrilinosWrappers::MPI::BlockVector &dst) const;
+  double vector_norm(const TrilinosWrappers::MPI::BlockVector &v) const;
 
   const TrilinosWrappers::MPI::Vector &get_phi();
 
@@ -253,7 +250,7 @@ private:
    */
   double current_alpha;
 
-
+  Lambdas<dim> lambdas;
 
 
 
