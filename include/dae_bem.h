@@ -65,7 +65,7 @@ using namespace deal2lkit;
 
 
 template <int dim>
-class DAEBEM : public IDAInterface<TrilinosWrappers::MPI::BlockVector>
+class DAEBEM : public ParameterAcceptor
 {
   public:
   DAEBEM(ComputationalDomain<dim> &comp_dom, BEMProblem<dim> &bem, const MPI_Comm comm = MPI_COMM_WORLD):
@@ -149,6 +149,10 @@ class DAEBEM : public IDAInterface<TrilinosWrappers::MPI::BlockVector>
   void output_results(const std::string);
 
   void compute_errors();
+
+  void set_functions_to_default();
+  
+  void jacobian_vmult(const TrilinosWrappers::MPI::BlockVector &src, TrilinosWrappers::MPI::BlockVector &dst) const;
 
   const TrilinosWrappers::MPI::Vector &get_phi();
 

@@ -13,6 +13,84 @@ RCP<Time> ResidualTimerDAE = Teuchos::TimeMonitor::getNewTimer("Residual");
 
 
 
+template <int dim>
+void
+DAEBEM<dim>::set_functions_to_default()
+{
+  create_new_vector = [this]() ->shared_ptr<TrilinosWrappers::MPI::BlockVector>
+  {
+    return this->create_new_vector();
+  };
+
+  residual = [this](const double t,
+                    const TrilinosWrappers::MPI::BlockVector &y,
+                    const TrilinosWrappers::MPI::BlockVector &y_dot,
+                    TrilinosWrappers::MPI::BlockVector &residual) ->int
+  {
+    return this->residual(t,y,y_dot,residual);
+  };
+
+  setup_jacobian = [this](const double t,
+                          const TrilinosWrappers::MPI::BlockVector &y,
+                          const TrilinosWrappers::MPI::BlockVector &y_dot,
+                          const double alpha) ->int
+  {
+    return this->setup_jacobian(t,y,y_dot,alpha);
+  };
+
+  solve_jacobian_system = [this](const TrilinosWrappers::MPI::BlockVector &rhs,
+                                 TrilinosWrappers::MPI::BlockVector &dst) ->int
+  {
+    return this->solve_jacobian_system(rhs,dst);
+  };
+
+  // output_step = [this](const double t,
+  //                      const TrilinosWrappers::MPI::BlockVector &y,
+  //                      const TrilinosWrappers::MPI::BlockVector &y_dot,
+  //                      const unsigned int step_number)
+  // {
+  //   this->simulator->output_step(t,y,y_dot,step_number);
+  // };
+
+  solver_should_restart = [this](const double t,
+                                 TrilinosWrappers::MPI::BlockVector &y,
+                                 TrilinosWrappers::MPI::BlockVector &y_dot) ->bool
+  {
+    return this->solver_should_restart(t,y,y_dot);
+  };
+
+  differential_components = [this]() ->TrilinosWrappers::MPI::BlockVector &
+  {
+    return this->differential_components();
+  };
+
+  // get_local_tolerances = [this]() ->TrilinosWrappers::MPI::BlockVector &
+  // {
+  //   AssertThrow(false, ExcPureFunctionCalled("Please implement get_local_tolerances function."));
+  //   static auto lt = this->create_new_vector();
+  //   return *lt;
+  // };
+  //
+  // get_lumped_mass_matrix = [&]() ->TrilinosWrappers::MPI::BlockVector &
+  // {
+  //   static shared_ptr<TrilinosWrappers::MPI::BlockVector> lm;
+  //   lm = this->create_new_vector();
+  //   this->simulator->get_lumped_mass_matrix(*lm);
+  //   return *lm;
+  // };
+
+  jacobian_vmult = [this](const TrilinosWrappers::MPI::BlockVector &src,
+                          TrilinosWrappers::MPI::BlockVector &dst) ->int
+  {
+    return this->jacobian_vmult(src,dst);
+  };
+
+  // vector_norm = [this](const TrilinosWrappers::MPI::BlockVector &vector) ->double
+  // {
+  //   return this->simulator->vector_norm(vector);
+  // };
+
+}
 
 template <int dim>
 int
@@ -516,8 +594,14 @@ void DAEBEM<dim>::solve_problem()
   pcout<<"Computing normal vector"<<std::endl;
   bem.compute_normals();
 
-  ida(*this);
-  ida.start_ode(solution, solution_dot, 10);
+  // ida(*this);
+  ida.residual = this->residual;
+   ida.setup_jacobian = this->setup_jacobian;
+   ida.solver_should_restart = this->solver_should_restart;
+   ida.solve_jacobian_system = this->solve_jacobian_system;
+   ida.output_step = this->output_step;
+   ida.differential_components = this->differential_components;
+   ida.solve_dae(solution, solution_dot);
   // if (time_stepper == "ida")
   //   ida.start_ode(solution, solution_dot, max_time_iterations);
   // else if (time_stepper == "euler")
