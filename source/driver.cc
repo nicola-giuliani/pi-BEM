@@ -108,20 +108,21 @@ void Driver<dim>::run()
         {
           Teuchos::TimeMonitor LocalTimer(*SolveTime);
           bem_problem.reinit();
-          boundary_conditions.solve_problem();
+          // boundary_conditions.solve_problem();
+          dae_bem.solve_problem();
         }
         if (!global_refinement && i<local_refinement_cycles)
           {
             // Compute error estimator and local refinement strategy
-            bem_problem.adaptive_refinement(boundary_conditions.get_phi());
+            bem_problem.adaptive_refinement(dae_bem.get_phi());
             computational_domain.update_triangulation();
           }
 
       }
 
-    std::string filename = ( boundary_conditions.output_file_name);
-    boundary_conditions.compute_errors();
-    boundary_conditions.output_results(filename);
+    std::string filename = ( dae_bem.output_file_name);
+    dae_bem.compute_errors(0.);
+    dae_bem.output_results(filename);
     // }
   }
   // Write a summary of all timers

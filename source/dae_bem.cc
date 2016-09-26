@@ -84,25 +84,31 @@ DAEBEM<dim>::setup_jacobian(const double t,
   return 0;
 }
 
+
 template <int dim>
-TrilinosWrappers::MPI::BlockVector &
-DAEBEM<dim>::differential_components() const
+void
+DAEBEM<dim>::set_dae_initial_conditions(TrilinosWrappers::MPI::BlockVector &xxx, TrilinosWrappers::MPI::BlockVector &xxx_dot)
 {
-  static TrilinosWrappers::MPI::BlockVector diff_comps;
-  diff_comps.reinit(solution);
+    get_boundary_conditions(0.);
+    TrilinosWrappers::MPI::Vector phi_bem(xxx.block(1));
+    TrilinosWrappers::MPI::Vector dphi_dn_bem(xxx.block(0));
 
-  for(auto i : dirichlet_dot_set)
-  {
-    diff_comps.block(1)=1.;
-  }
+    TrilinosWrappers::MPI::Vector tmp_rhs_bem(this_cpu_set, mpi_communicator);
+    for(auto i : neumann_set_bem)
+    {
+      tmp_rhs_bem[i]=dphi_dn[i];
+    }
+    for(auto i : dirichlet_set_bem)
+    {
+      tmp_rhs_bem[i]=phi[i];
+    }
 
-  for(auto i : neumann_dot_set)
-  {
-    diff_comps.block(0)=1.;
-  }
+    bem.solve(phi_bem, dphi_dn_bem, tmp_rhs_bem);
+    xxx.block(1)=phi_bem;
+    xxx.block(0)=dphi_dn_bem;
+    xxx_dot.block(1)=phi_dot;
+    xxx_dot.block(0)=dphi_dn_dot;
 
-  // set_constrained_dofs_to_zero(diff_comps);
-  return diff_comps;
 }
 
 template <int dim>
@@ -271,7 +277,7 @@ DAEBEM<dim>::residual(const double t,
   TrilinosWrappers::MPI::Vector dphi_dn_bem(solution.block(0));
 
   // settare i dirichlet/neumann bem
-  prepare_bem_vectors(t);
+  get_boundary_conditions(t);
 
   TrilinosWrappers::MPI::Vector tmp_rhs_bem(this_cpu_set, mpi_communicator);
   for(auto i : neumann_set_bem)
@@ -322,9 +328,22 @@ DAEBEM<dim>::residual(const double t,
 
 
 
-
-
-
+template <int dim>
+TrilinosWrappers::MPI::BlockVector & DAEBEM<dim>::differential_components() const
+{
+  static TrilinosWrappers::MPI::BlockVector differential_components(this_cpu_set_double);
+  differential_components=0.;
+  for(auto i : differential_set)
+  {
+    differential_components.block(0)[i]=1.;
+  }
+  for(auto i : differential_set)
+  {
+    differential_components.block(1)[i]=1.;
+  }
+  differential_components.compress(VectorOperation::insert);
+  return differential_components;
+}
 
 template <int dim>
 void DAEBEM<dim>::declare_parameters(ParameterHandler &prm)
@@ -382,6 +401,7 @@ void DAEBEM<dim>::declare_parameters(ParameterHandler &prm)
 
   add_parameter(prm, &jacobian_direct_resolution, "Solve the Jacobian using direct method","false", Patterns::Bool());
 
+  add_parameter(prm, &time_stepper, "Time stepper solver","ida", Patterns::Selection("ida|imex"));
 
 
 }
@@ -492,6 +512,8 @@ void DAEBEM<dim>::solve_problem()
 
   potential.set_time(0);
   potential_gradient.set_time(0);
+  potential_dot.set_time(0);
+  potential_gradient_dot.set_time(0);
 
   const types::global_dof_index n_dofs =  bem.dh.n_dofs();
   std::vector<types::subdomain_id> dofs_domain_association(n_dofs);
@@ -540,19 +562,44 @@ void DAEBEM<dim>::solve_problem()
   bem.compute_normals();
 
   // ida(*this);
-  ida.residual = lambdas.residual;
-   ida.setup_jacobian = lambdas.setup_jacobian;
-   ida.solver_should_restart = lambdas.solver_should_restart;
-   ida.solve_jacobian_system = lambdas.solve_jacobian_system;
-   ida.output_step = lambdas.output_step;
-   ida.differential_components = lambdas.differential_components;
-   ida.solve_dae(solution, solution_dot);
+  compute_dae_cache();
+  set_dae_initial_conditions(solution, solution_dot);
+  phi.print(std::cout);
+  TrilinosWrappers::MPI::BlockVector try_residual(solution);
+  residual(0., solution, solution_dot, try_residual);
+  for(auto i : algebraic_set)
+    pcout<<try_residual.block(0)[i]<<" : "<<try_residual.block(1)[i]<<std::endl;
+  if(time_stepper == "ida")
+  {
+    ida.residual = lambdas.residual;
+    ida.setup_jacobian = lambdas.setup_jacobian;
+    ida.solver_should_restart = lambdas.solver_should_restart;
+    ida.solve_jacobian_system = lambdas.solve_jacobian_system;
+    ida.output_step = lambdas.output_step;
+    ida.differential_components = lambdas.differential_components;
+    ida.solve_dae(solution, solution_dot);
+  }
+  else if(time_stepper == "imex")
+  {
+    imex.residual = lambdas.residual;
+    imex.setup_jacobian = lambdas.setup_jacobian;
+    imex.solver_should_restart = lambdas.solver_should_restart;
+    imex.solve_jacobian_system = lambdas.solve_jacobian_system;
+    imex.output_step = lambdas.output_step;
+    // imex.differential_components = lambdas.differential_components;
+    imex.solve_dae(solution, solution_dot);
+  }
+
+  dphi_dn=solution.block(0);
+  phi=solution.block(1);
+  dphi_dn_dot=solution.block(0);
+  phi_dot=solution_dot.block(1);
   // if (time_stepper == "ida")
   //   ida.start_ode(solution, solution_dot, max_time_iterations);
   // else if (time_stepper == "euler")
   //   euler.start_ode(solution, solution_dot);
 
-  // prepare_bem_vectors();
+  // get_boundary_conditions();
   //
   //
   // bem.solve(phi, dphi_dn, tmp_rhs);
@@ -579,6 +626,24 @@ const TrilinosWrappers::MPI::Vector &DAEBEM<dim>::get_dphi_dn()
 template <int dim>
 void DAEBEM<dim>::compute_dae_cache()
 {
+  neumann_set.clear();
+  dirichlet_set.clear();
+  neumann_set_bem.clear();
+  dirichlet_set_bem.clear();
+  dirichlet_dot_set.clear();
+  neumann_dot_set.clear();
+  algebraic_set.clear();
+  differential_set.clear();
+
+  neumann_set.set_size(this_cpu_set.size());
+  dirichlet_set.set_size(this_cpu_set.size());
+  neumann_set_bem.set_size(this_cpu_set.size());
+  dirichlet_set_bem.set_size(this_cpu_set.size());
+  dirichlet_dot_set.set_size(this_cpu_set.size());
+  neumann_dot_set.set_size(this_cpu_set.size());
+  algebraic_set.set_size(this_cpu_set.size());
+  differential_set.set_size(this_cpu_set.size());
+
   cell_it
   cell = bem.dh.begin_active(),
   endc = bem.dh.end();
@@ -592,63 +657,80 @@ void DAEBEM<dim>::compute_dae_cache()
                            update_JxW_values);
 
 
+
   for (cell = bem.dh.begin_active(); cell != endc; ++cell)
   {
+    pcout<<(unsigned int) cell->material_id()<<std::endl;
     cell->get_dof_indices(local_dof_indices);
-      if(cell->material_id() == 0)// Neumann node
-      {
-        for (unsigned int j=0; j<bem.fe->dofs_per_cell; ++j)
-          if(bem.this_cpu_set.is_element(j))
-          {
-            algebraic_set.add_index(j);
-            neumann_set.add_index(j);
-            neumann_set_bem.add_index(j);
-          }
-      }
-      else if(cell->material_id() == 1)//Dirichlet node
-      {
-        for (unsigned int j=0; j<bem.fe->dofs_per_cell; ++j)
-          if(bem.this_cpu_set.is_element(j))
-          {
-            algebraic_set.add_index(j);
-            dirichlet_set.add_index(j);
-            dirichlet_set_bem.add_index(j);
-          }
+    if(cell->material_id() == 0)// Neumann node
+    {
+      for (unsigned int j=0; j<bem.fe->dofs_per_cell; ++j)
+        if(bem.this_cpu_set.is_element(local_dof_indices[j]))
+        {
+          algebraic_set.add_index(local_dof_indices[j]);
+          neumann_set.add_index(local_dof_indices[j]);
+          neumann_set_bem.add_index(local_dof_indices[j]);
+        }
+    }
+    else if(cell->material_id() == 1)//Dirichlet node
+    {
+      for (unsigned int j=0; j<bem.fe->dofs_per_cell; ++j)
+        if(bem.this_cpu_set.is_element(local_dof_indices[j]))
+        {
+          algebraic_set.add_index(local_dof_indices[j]);
+          dirichlet_set.add_index(local_dof_indices[j]);
+          dirichlet_set_bem.add_index(local_dof_indices[j]);
+        }
 
-      }
-      else if(cell->material_id() == 2)//Neumann differential node
-      {
-        for (unsigned int j=0; j<bem.fe->dofs_per_cell; ++j)
-          if(bem.this_cpu_set.is_element(j))
-          {
-            differential_set.add_index(j);
-            neumann_set_bem.add_index(j);
-            neumann_dot_set.add_index(j);
-          }
+    }
+    else if(cell->material_id() == 2)//Neumann differential node
+    {
+      for (unsigned int j=0; j<bem.fe->dofs_per_cell; ++j)
+        if(bem.this_cpu_set.is_element(local_dof_indices[j]))
+        {
+          differential_set.add_index(local_dof_indices[j]);
+          neumann_set_bem.add_index(local_dof_indices[j]);
+          neumann_dot_set.add_index(local_dof_indices[j]);
+        }
 
-      }
-      else if(cell->material_id() == 3)//Dirichlet differential node
-      {
-        for (unsigned int j=0; j<bem.fe->dofs_per_cell; ++j)
-          if(bem.this_cpu_set.is_element(j))
-          {
-            differential_set.add_index(j);
-            dirichlet_set_bem.add_index(j);
-            dirichlet_dot_set.add_index(j);
-          }
+    }
+    else if(cell->material_id() == 3)//Dirichlet differential node
+    {
+      for (unsigned int j=0; j<bem.fe->dofs_per_cell; ++j)
+        if(bem.this_cpu_set.is_element(local_dof_indices[j]))
+        {
+          differential_set.add_index(local_dof_indices[j]);
+          dirichlet_set_bem.add_index(local_dof_indices[j]);
+          dirichlet_dot_set.add_index(local_dof_indices[j]);
+        }
 
-      }
+    }
 
   }
+
+  neumann_set.compress();
+  dirichlet_set.compress();
+  neumann_set_bem.compress();
+  dirichlet_set_bem.compress();
+  dirichlet_dot_set.compress();
+  neumann_dot_set.compress();
+  algebraic_set.compress();
+  differential_set.compress();
+
 
 }
 
 template <int dim>
-void DAEBEM<dim>::prepare_bem_vectors(double t)
+void DAEBEM<dim>::get_boundary_conditions(double t)
 {
   Teuchos::TimeMonitor LocalTimer(*PrepareTimeDAE);
   // bem.compute_normals();
   const types::global_dof_index n_dofs =  bem.dh.n_dofs();
+
+  potential.set_time(t);
+  potential_gradient.set_time(t);
+  potential_dot.set_time(t);
+  potential_gradient_dot.set_time(t);
 
   phi.reinit(this_cpu_set,mpi_communicator);
   dphi_dn.reinit(this_cpu_set,mpi_communicator);
@@ -711,10 +793,11 @@ void DAEBEM<dim>::prepare_bem_vectors(double t)
 }
 
 template <int dim>
-void DAEBEM<dim>::compute_errors()
+void DAEBEM<dim>::compute_errors(double t)
 {
   Teuchos::TimeMonitor LocalTimer(*ErrorsTimerDAE);
-
+  potential.set_time(t);
+  potential_gradient.set_time(t);
   // We still need to communicate our results to compute the errors.
   bem.compute_gradients(phi,dphi_dn);
   Vector<double> localized_gradient_solution(bem.vector_gradients_solution);//vector_gradients_solution

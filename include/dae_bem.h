@@ -141,13 +141,15 @@ class DAEBEM : public ParameterAcceptor
 
   virtual void parse_parameters(ParameterHandler &prm);
 
-  void prepare_bem_vectors(double t);
+  void get_boundary_conditions(double t);
 
   void solve_problem();
 
+  void set_dae_initial_conditions(TrilinosWrappers::MPI::BlockVector &xxx, TrilinosWrappers::MPI::BlockVector &xxx_dot);
+
   void output_results(const std::string);
 
-  void compute_errors();
+  void compute_errors(double t);
 
   double vector_norm(const TrilinosWrappers::MPI::BlockVector &v) const;
 
@@ -169,6 +171,8 @@ private:
   ParsedFunction<dim> potential_dot;
 
   std::string node_displacement_type;
+
+  std::string time_stepper;
 
   SolverControl solver_control;
 
@@ -218,6 +222,7 @@ private:
   TrilinosWrappers::BlockSparseMatrix jacobian_preconditioner_matrix;
 
   IDAInterface<TrilinosWrappers::MPI::BlockVector> ida;
+  IMEXStepper<TrilinosWrappers::MPI::BlockVector> imex;
 
   double jacobian_solver_tolerance;
   /**
