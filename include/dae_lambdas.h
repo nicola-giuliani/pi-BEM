@@ -124,7 +124,7 @@ public:
    * is used by Kinsol (through imex) for setting the weights used
    * for computing the norm a vector.
    */
-  // std::function<TrilinosWrappers::MPI::BlockVector&()> get_lumped_mass_matrix;
+  std::function<TrilinosWrappers::MPI::BlockVector&()> get_lumped_mass_matrix;
 
   /**
    * Compute the matrix-vector product Jacobian times @p src,

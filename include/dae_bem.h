@@ -77,13 +77,16 @@ class DAEBEM : public ParameterAcceptor
     mpi_communicator (comm),
     n_mpi_processes (Utilities::MPI::n_mpi_processes(mpi_communicator)),
     this_mpi_process (Utilities::MPI::this_mpi_process(mpi_communicator)),
+
     pcout(std::cout,
           (this_mpi_process
            == 0)),
     data_out_scalar("Scalar data out", "vtu"),
-    data_out_vector("Vector data out", "vtu")
+    data_out_vector("Vector data out", "vtu"),
+    lambdas(*this)
   {
-    dofs_number = 0,
+    lambdas.initialize_dae(*this);
+    dofs_number = 0;
     output_frequency = 1;
   }
 
@@ -133,6 +136,14 @@ class DAEBEM : public ParameterAcceptor
    otherwise.  */
   virtual TrilinosWrappers::MPI::BlockVector &differential_components() const;
 
+
+  /**
+   * Return a vector which is a lumped mass matrix. This function
+   * is used by Kinsol (through imex) for setting the weights used
+   * for computing the norm a vector.
+   */
+  virtual TrilinosWrappers::MPI::BlockVector & get_lumped_mass_matrix() const;
+
   void compute_dae_cache();
 
   typedef typename DoFHandler<dim-1,dim>::active_cell_iterator cell_it;
@@ -156,6 +167,7 @@ class DAEBEM : public ParameterAcceptor
   const TrilinosWrappers::MPI::Vector &get_phi();
 
   const TrilinosWrappers::MPI::Vector &get_dphi_dn();
+
 
 
   std::string output_file_name;

@@ -87,13 +87,10 @@ set_functions_to_default()
     return *lt;
   };
 
-  // get_lumped_mass_matrix = [&]() ->TrilinosWrappers::MPI::BlockVector &
-  // {
-  //   static shared_ptr<TrilinosWrappers::MPI::BlockVector> lm;
-  //   lm = this->create_new_vector();
-  //   this->dae->get_lumped_mass_matrix(*lm);
-  //   return *lm;
-  // };
+  get_lumped_mass_matrix = [&]() ->TrilinosWrappers::MPI::BlockVector &
+  {
+    return this->dae->get_lumped_mass_matrix();
+  };
 
   jacobian_vmult = [this](const TrilinosWrappers::MPI::BlockVector &src,
                           TrilinosWrappers::MPI::BlockVector &dst) ->int

@@ -104,10 +104,38 @@ DAEBEM<dim>::set_dae_initial_conditions(TrilinosWrappers::MPI::BlockVector &xxx,
     }
 
     bem.solve(phi_bem, dphi_dn_bem, tmp_rhs_bem);
-    xxx.block(1)=phi_bem;
-    xxx.block(0)=dphi_dn_bem;
-    xxx_dot.block(1)=phi_dot;
-    xxx_dot.block(0)=dphi_dn_dot;
+    // Where we impose Dirichlet BC we check that the solution is equal to the prescribed one
+    for(auto i : dirichlet_set)
+    {
+      xxx.block(1)[i]=phi[i];
+    }
+    // Where we impose some kind of Neumann (dot or nor) BC we check that the solution is equal to the BEM one
+    for(auto i : neumann_set_bem)
+    {
+      xxx.block(1)[i]=phi_bem[i];
+    }
+    // Where we impose Dirichlet dot BC we check that the solution is equal to the prescribed one
+    for(auto i : dirichlet_dot_set)
+    {
+      xxx_dot.block(1)[i]=phi_dot[i];
+    }
+
+    // Where we impose Neumann BC we check that the solution is equal to the prescribed one
+    for(auto i : neumann_set)
+    {
+      xxx.block(0)[i]=dphi_dn[i];
+    }
+    // Where we impose some kind of Dirichlet (dot or nor) BC we check that the solution is equal to the BEM one
+    for(auto i : dirichlet_set_bem)
+    {
+      xxx.block(0)[i]=dphi_dn_bem[i];
+    }
+    // Where we impose Neumann dot BC we check that the solution is equal to the prescribed one
+    for(auto i : neumann_dot_set)
+    {
+      xxx_dot.block(0)[i]=dphi_dn_dot[i];
+    }
+
 
 }
 
@@ -133,6 +161,27 @@ void DAEBEM<dim>::output_step(const double t,
                          const TrilinosWrappers::MPI::BlockVector &solution_dot,
                          const unsigned int step_number)
 {
+  const Vector<double> localized_phi (solution.block(1));
+  const Vector<double> localized_dphi_dn (solution.block(0));
+  const Vector<double> localized_phi_dot (solution_dot.block(1));
+  const Vector<double> localized_dphi_dn_dot (solution_dot.block(0));
+  // localized_dphi_dn.print(std::cout);
+  // localized_phi.print(std::cout);
+  if (this_mpi_process == 0)
+    {
+      std::string filename_ida = "ida_step_output_"+Utilities::to_string(t)+Utilities::int_to_string(step_number)+".vtu";
+
+      DataOut<dim-1, DoFHandler<dim-1, dim> > dataout_ida;
+
+      dataout_ida.attach_dof_handler(bem.dh);
+
+
+
+      dataout_ida.add_data_vector(localized_phi, "phi", DataOut<dim-1, DoFHandler<dim-1, dim> >::type_dof_data);
+      dataout_ida.add_data_vector(localized_dphi_dn, "dphi_dn", DataOut<dim-1, DoFHandler<dim-1, dim> >::type_dof_data);
+      dataout_ida.add_data_vector(localized_phi_dot, "phi_dot", DataOut<dim-1, DoFHandler<dim-1, dim> >::type_dof_data);
+      dataout_ida.add_data_vector(localized_dphi_dn_dot, "dphi_dn_dot", DataOut<dim-1, DoFHandler<dim-1, dim> >::type_dof_data);
+    }
 
   return;
 }
@@ -326,23 +375,36 @@ DAEBEM<dim>::residual(const double t,
 
 }
 
+template <int dim>
+TrilinosWrappers::MPI::BlockVector & DAEBEM<dim>::get_lumped_mass_matrix() const
+{
+  static TrilinosWrappers::MPI::BlockVector diag;
+  diag.reinit(solution);
+
+  diag.block(0)=1.;
+  diag.block(1)=1.;
+
+  return diag;
+
+}
 
 
 template <int dim>
 TrilinosWrappers::MPI::BlockVector & DAEBEM<dim>::differential_components() const
 {
-  static TrilinosWrappers::MPI::BlockVector differential_components(this_cpu_set_double);
-  differential_components=0.;
+  static TrilinosWrappers::MPI::BlockVector diff_comps;
+  diff_comps.reinit(solution);
   for(auto i : differential_set)
   {
-    differential_components.block(0)[i]=1.;
+    diff_comps.block(0)[i]=1.;
   }
   for(auto i : differential_set)
   {
-    differential_components.block(1)[i]=1.;
+    diff_comps.block(1)[i]=1.;
   }
-  differential_components.compress(VectorOperation::insert);
-  return differential_components;
+  diff_comps.compress(VectorOperation::insert);
+
+  return diff_comps;
 }
 
 template <int dim>
@@ -403,6 +465,8 @@ void DAEBEM<dim>::declare_parameters(ParameterHandler &prm)
 
   add_parameter(prm, &time_stepper, "Time stepper solver","ida", Patterns::Selection("ida|imex"));
 
+  add_parameter(prm, &output_file_name, "Output file name", "result", Patterns::Anything());
+
 
 }
 
@@ -410,7 +474,8 @@ template <int dim>
 void DAEBEM<dim>::parse_parameters(ParameterHandler &prm)
 {
 
-  output_file_name = prm.get("Output file name");
+  ParameterAcceptor::parse_parameters(prm);
+  // output_file_name = prm.get("Output file name");
 
 
   // prm.enter_subsection(std::string("Potential Gradient function")+
@@ -564,28 +629,33 @@ void DAEBEM<dim>::solve_problem()
   // ida(*this);
   compute_dae_cache();
   set_dae_initial_conditions(solution, solution_dot);
-  phi.print(std::cout);
   TrilinosWrappers::MPI::BlockVector try_residual(solution);
   residual(0., solution, solution_dot, try_residual);
   for(auto i : algebraic_set)
     pcout<<try_residual.block(0)[i]<<" : "<<try_residual.block(1)[i]<<std::endl;
+  lambdas.set_functions_to_default();
   if(time_stepper == "ida")
   {
+    pcout<<"solving using ida"<<std::endl;
     ida.residual = lambdas.residual;
     ida.setup_jacobian = lambdas.setup_jacobian;
     ida.solver_should_restart = lambdas.solver_should_restart;
     ida.solve_jacobian_system = lambdas.solve_jacobian_system;
     ida.output_step = lambdas.output_step;
+    ida.create_new_vector = lambdas.create_new_vector;
     ida.differential_components = lambdas.differential_components;
     ida.solve_dae(solution, solution_dot);
   }
   else if(time_stepper == "imex")
   {
+    pcout<<"solving using imex"<<std::endl;
     imex.residual = lambdas.residual;
     imex.setup_jacobian = lambdas.setup_jacobian;
     imex.solver_should_restart = lambdas.solver_should_restart;
     imex.solve_jacobian_system = lambdas.solve_jacobian_system;
     imex.output_step = lambdas.output_step;
+    imex.create_new_vector = lambdas.create_new_vector;
+    imex.get_lumped_mass_matrix = lambdas.get_lumped_mass_matrix;
     // imex.differential_components = lambdas.differential_components;
     imex.solve_dae(solution, solution_dot);
   }
@@ -660,7 +730,6 @@ void DAEBEM<dim>::compute_dae_cache()
 
   for (cell = bem.dh.begin_active(); cell != endc; ++cell)
   {
-    pcout<<(unsigned int) cell->material_id()<<std::endl;
     cell->get_dof_indices(local_dof_indices);
     if(cell->material_id() == 0)// Neumann node
     {
@@ -717,6 +786,14 @@ void DAEBEM<dim>::compute_dae_cache()
   algebraic_set.compress();
   differential_set.compress();
 
+  neumann_set.print(std::cout);
+  neumann_dot_set.print(std::cout);
+  neumann_set_bem.print(std::cout);
+
+
+  dirichlet_set.print(std::cout);
+  dirichlet_dot_set.print(std::cout);
+  dirichlet_set_bem.print(std::cout);
 
 }
 
