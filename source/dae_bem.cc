@@ -1,6 +1,7 @@
 
 #include <dae_bem.h>
 #include "Teuchos_TimeMonitor.hpp"
+#include <ida/ida_impl.h>
 
 using Teuchos::Time;
 using Teuchos::TimeMonitor;
@@ -20,14 +21,17 @@ DAEBEM<dim>::setup_jacobian(const double t,
                                             const TrilinosWrappers::MPI::BlockVector &src_yp,
                                             const double alpha)
 {
-
+  pcout<<"setting up Jacobian"<<std::endl;
   BlockDynamicSparsityPattern csp(src_yp.n_blocks(), src_yy.n_blocks());
 
   for(unsigned int i=0; i<src_yp.n_blocks(); ++i)
     for(unsigned int j=0; j<src_yy.n_blocks(); ++j)
+    {
+      csp.block(i,j).reinit(bem.dh.n_dofs(),bem.dh.n_dofs());
       DoFTools::make_sparsity_pattern (bem.dh,
                                        csp.block(i,j),
                                        bem.constraints);
+                                     }
   csp.compress();
 
   jacobian_sparsity.copy_from(csp);
@@ -97,17 +101,21 @@ DAEBEM<dim>::set_dae_initial_conditions(TrilinosWrappers::MPI::BlockVector &xxx,
     for(auto i : neumann_set_bem)
     {
       tmp_rhs_bem[i]=dphi_dn[i];
+      xxx.block(0)[i]=dphi_dn[i];
     }
     for(auto i : dirichlet_set_bem)
     {
       tmp_rhs_bem[i]=phi[i];
+      xxx.block(1)[i]=phi[i];
     }
-
+    // phi.print(std::cout);
+    // dphi_dn.print(std::cout);
+    // tmp_rhs_bem.print(std::cout);
     bem.solve(phi_bem, dphi_dn_bem, tmp_rhs_bem);
     // Where we impose Dirichlet BC we check that the solution is equal to the prescribed one
     for(auto i : dirichlet_set)
     {
-      xxx.block(1)[i]=phi[i];
+      xxx.block(0)[i]=dphi_dn_bem[i];
     }
     // Where we impose some kind of Neumann (dot or nor) BC we check that the solution is equal to the BEM one
     for(auto i : neumann_set_bem)
@@ -135,6 +143,10 @@ DAEBEM<dim>::set_dae_initial_conditions(TrilinosWrappers::MPI::BlockVector &xxx,
     {
       xxx_dot.block(0)[i]=dphi_dn_dot[i];
     }
+    xxx.block(0).compress(VectorOperation::insert);
+    xxx.block(1).compress(VectorOperation::insert);
+    xxx_dot.block(0).compress(VectorOperation::insert);
+    xxx_dot.block(1).compress(VectorOperation::insert);
 
 
 }
@@ -143,6 +155,8 @@ template <int dim>
 int DAEBEM<dim>::jacobian_vmult(const TrilinosWrappers::MPI::BlockVector &src,
                             TrilinosWrappers::MPI::BlockVector &dst) const
 {
+  std::cout<<jacobian_matrix.n_block_rows()<<" "<<dst.n_blocks()<<std::endl;
+  std::cout<<jacobian_matrix.n_block_cols()<<" "<<src.n_blocks()<<std::endl;
     jacobian_matrix.vmult(dst,src);
 
     return 0;
@@ -167,9 +181,19 @@ void DAEBEM<dim>::output_step(const double t,
   const Vector<double> localized_dphi_dn_dot (solution_dot.block(0));
   // localized_dphi_dn.print(std::cout);
   // localized_phi.print(std::cout);
+
   if (this_mpi_process == 0)
     {
-      std::string filename_ida = "ida_step_output_"+Utilities::to_string(t)+Utilities::int_to_string(step_number)+".vtu";
+      potential.set_time(t);
+      Vector<double> phi_ex(bem.dh.n_dofs());
+      std::vector<Point<dim> > support_points(bem.dh.n_dofs());
+      DoFTools::map_dofs_to_support_points<dim-1, dim>( *bem.mapping, bem.dh, support_points);
+
+      for(types::global_dof_index i = 0; i<bem.dh.n_dofs(); ++i)
+        {
+          phi_ex[i]=potential.value(support_points[i]);
+        }
+      std::string filename_ida = "dae_step_output_"+Utilities::to_string(t)+".vtu";//+Utilities::int_to_string(step_number)+".vtu";
 
       DataOut<dim-1, DoFHandler<dim-1, dim> > dataout_ida;
 
@@ -178,9 +202,17 @@ void DAEBEM<dim>::output_step(const double t,
 
 
       dataout_ida.add_data_vector(localized_phi, "phi", DataOut<dim-1, DoFHandler<dim-1, dim> >::type_dof_data);
+      dataout_ida.add_data_vector(phi_ex, "phi_ex", DataOut<dim-1, DoFHandler<dim-1, dim> >::type_dof_data);
       dataout_ida.add_data_vector(localized_dphi_dn, "dphi_dn", DataOut<dim-1, DoFHandler<dim-1, dim> >::type_dof_data);
       dataout_ida.add_data_vector(localized_phi_dot, "phi_dot", DataOut<dim-1, DoFHandler<dim-1, dim> >::type_dof_data);
       dataout_ida.add_data_vector(localized_dphi_dn_dot, "dphi_dn_dot", DataOut<dim-1, DoFHandler<dim-1, dim> >::type_dof_data);
+      dataout_ida.build_patches(*bem.mapping,
+                                   bem.mapping_degree,
+                                   DataOut<dim-1, DoFHandler<dim-1, dim> >::curved_inner_cells);
+
+      std::ofstream file_ida(filename_ida.c_str());
+
+      dataout_ida.write_vtu(file_ida);
     }
 
   return;
@@ -252,14 +284,10 @@ DAEBEM<dim>::solver_should_restart(const double t,
 
 template <int dim>
 int
-DAEBEM<dim>::solve_jacobian_system(//const double /*t*/,
-                                    //               const TrilinosWrappers::MPI::BlockVector &/*y*/,
-                                      //             const TrilinosWrappers::MPI::BlockVector &/*y_dot*/,
-                                        //           const TrilinosWrappers::MPI::BlockVector &,
-                                          //       const double /*alpha*/,
-                                                   const TrilinosWrappers::MPI::BlockVector &src,
-                                                   TrilinosWrappers::MPI::BlockVector &dst) const
+DAEBEM<dim>::solve_jacobian_system(const TrilinosWrappers::MPI::BlockVector &src,
+                                         TrilinosWrappers::MPI::BlockVector &dst) const
 {
+  pcout<<"solving Jacobian"<<std::endl;
   // auto _timer = computing_timer.scoped_timer ("Solve system");
   // set_constrained_dofs_to_zero(dst);
   //
@@ -337,7 +365,10 @@ DAEBEM<dim>::residual(const double t,
   {
     tmp_rhs_bem[i]=solution.block(1)[i];
   }
-
+  // tmp_rhs_bem.print(std::cout);
+  // solution_dot.block(0).print(std::cout);
+  // dphi_dn.print(std::cout);
+  // tmp_rhs_bem.print(std::cout);
   bem.solve(phi_bem, dphi_dn_bem, tmp_rhs_bem);
 
   // Where we impose Dirichlet BC we check that the solution is equal to the prescribed one
@@ -371,7 +402,9 @@ DAEBEM<dim>::residual(const double t,
     dst.block(0)[i]=solution_dot.block(0)[i]-dphi_dn_dot[i];
   }
 
+  pcout<<t<<" : "<<dst.block(0).l2_norm()<<" : "<<dst.block(1).l2_norm()<<std::endl;
 
+  return 0;
 
 }
 
@@ -592,9 +625,7 @@ void DAEBEM<dim>::solve_problem()
 
   for(unsigned int i=0; i<this_cpu_set_double.size(); ++i)
   {
-    this_cpu_set_complete[i].clear();
     this_cpu_set_complete[i] = bem.this_cpu_set;
-    this_cpu_set_complete[i].compress();
 
     this_cpu_set_double[i].clear();
     this_cpu_set_double[i] = bem.this_cpu_set;
@@ -631,8 +662,8 @@ void DAEBEM<dim>::solve_problem()
   set_dae_initial_conditions(solution, solution_dot);
   TrilinosWrappers::MPI::BlockVector try_residual(solution);
   residual(0., solution, solution_dot, try_residual);
-  for(auto i : algebraic_set)
-    pcout<<try_residual.block(0)[i]<<" : "<<try_residual.block(1)[i]<<std::endl;
+  for(auto i : this_cpu_set)
+    pcout<<i<<" : "<<try_residual.block(0)[i]<<" : "<<try_residual.block(1)[i]<<std::endl;
   lambdas.set_functions_to_default();
   if(time_stepper == "ida")
   {
@@ -644,7 +675,49 @@ void DAEBEM<dim>::solve_problem()
     ida.output_step = lambdas.output_step;
     ida.create_new_vector = lambdas.create_new_vector;
     ida.differential_components = lambdas.differential_components;
-    ida.solve_dae(solution, solution_dot);
+    // TrilinosWrappers::MPI::BlockVector variation_1(this_cpu_set_double);
+    // TrilinosWrappers::MPI::BlockVector variation_2(this_cpu_set_double);
+    // TrilinosWrappers::MPI::BlockVector variation_3(this_cpu_set_double);
+    // TrilinosWrappers::MPI::BlockVector variation_4(this_cpu_set_double);
+    // for(auto i : this_cpu_set)
+    // {
+    //   double f=(double)rand()/RAND_MAX*2e-8 -1e-8;
+    //   variation_1.block(0)[i]=solution.block(0)[i] + f;
+    //   variation_2.block(0)[i]=solution_dot.block(0)[i] + f;
+    //   variation_3.block(0)[i]=f;
+    //   // pcout<<f<<" ";
+    //   f=(double)rand()/RAND_MAX*2e-8 -1e-8;
+    //   // pcout<<f<<" ";
+    //   variation_1.block(1)[i]=solution.block(1)[i] + f;
+    //   variation_2.block(1)[i]=solution_dot.block(1)[i] + f;
+    //   variation_3.block(1)[i]=f;
+    //   f=(double)rand()/RAND_MAX*2e-8 -1e-8;
+    //   // pcout<<f<<" ";
+    //   // variation_2.block(0)[i]=solution_dot.block(0)[i] + f;
+    //   // variation_3.block(2)[i]=solution_dot.block(0)[i] + f;
+    //   // f=(double)rand()/RAND_MAX*2e-8 -1e-8;
+    //   // // pcout<<f<<std::endl;
+    //   // variation_2.block(1)[i]=solution_dot.block(1)[i] + f;
+    //   // variation_3.block(3)[i]=solution_dot.block(1)[i] + f;
+    // }
+    // TrilinosWrappers::MPI::BlockVector new_residual(try_residual);
+    // TrilinosWrappers::MPI::BlockVector new_residual_Jac(try_residual);
+    // ida.residual(0.,variation_1, variation_2,new_residual);
+    // ida.setup_jacobian(0., solution, solution_dot, 1.);
+    //
+    // jacobian_vmult(variation_3, new_residual_Jac);
+    // for(auto i : this_cpu_set)
+    // {
+    //   pcout<<" delta = "<<variation_3.block(0)[i]<<" : "<<variation_3.block(1)[i]<<std::endl;
+    //   pcout<<" J delta = "<<new_residual_Jac.block(0)[i]<<" : "<<new_residual_Jac.block(1)[i]<<std::endl;
+    //   pcout<<" f(x+delta) - f(x) = "<<-try_residual.block(0)[i]+new_residual.block(0)[i]<<" : "<<-try_residual.block(1)[i]+new_residual.block(1)[i]<<std::endl;
+    //   pcout<<" f(x+delta) - f(x) - J delta = "<<std::abs(-try_residual.block(0)[i]+new_residual.block(0)[i]-new_residual_Jac.block(0)[i])<<" : "<<std::abs(-try_residual.block(1)[i]+new_residual.block(1)[i]-new_residual_Jac.block(1)[i])<<std::endl;
+    // }
+    // ida.solve_jacobian_system(new_residual_Jac, variation_4);
+    // for(auto i : this_cpu_set)
+    //   pcout<<"J-1 try : "<<variation_3.block(0)[i]<<" : "<<variation_3.block(0)[i]<<" --- "<<variation_4.block(0)[i]<<" : "<<variation_4.block(0)[i]<<std::endl;
+    //
+      ida.solve_dae(solution, solution_dot);
   }
   else if(time_stepper == "imex")
   {
@@ -826,11 +899,11 @@ void DAEBEM<dim>::get_boundary_conditions(double t)
   cell = bem.dh.begin_active(),
   endc = bem.dh.end();
 
-  for(auto i : dirichlet_set)
+  for(auto i : this_cpu_set)
   {
     phi[i] = potential.value(support_points[i]);
   }
-  for(auto i : neumann_set)
+  for(auto i : this_cpu_set)
   {
     Vector<double> imposed_pot_grad(dim);
     potential_gradient.vector_value(support_points[i],imposed_pot_grad);
@@ -845,11 +918,11 @@ void DAEBEM<dim>::get_boundary_conditions(double t)
       dphi_dn[i] += imposed_pot_grad[d]*bem.vector_normals_solution[vec_index];
     }
   }
-  for(auto i : dirichlet_dot_set)
+  for(auto i : this_cpu_set)
   {
     phi_dot[i] = potential_dot.value(support_points[i], 0);
   }
-  for(auto i : neumann_dot_set)
+  for(auto i : this_cpu_set)
   {
     dphi_dn_dot[i] = 0;
     Vector<double> imposed_pot_grad_dot(dim);

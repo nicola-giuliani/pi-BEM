@@ -54,6 +54,12 @@ set_functions_to_default()
     return this->dae->setup_jacobian(t,y,y_dot,alpha);
   };
 
+  // ida.solve_jacobian_system = [this](const VEC &rhs,
+  //                                    VEC &dst) ->int
+  // {
+  //   return this->solve_jacobian_system(rhs,dst);
+  // };
+
   solve_jacobian_system = [this](const TrilinosWrappers::MPI::BlockVector &rhs,
                                  TrilinosWrappers::MPI::BlockVector &dst) ->int
   {
