@@ -24,20 +24,25 @@ DAEBEM<dim>::setup_jacobian(const double t,
   pcout<<"setting up Jacobian"<<std::endl;
   BlockDynamicSparsityPattern csp(src_yp.n_blocks(), src_yy.n_blocks());
 
+  csp.reinit(this_cpu_set_double);
   for(unsigned int i=0; i<src_yp.n_blocks(); ++i)
     for(unsigned int j=0; j<src_yy.n_blocks(); ++j)
     {
-      csp.block(i,j).reinit(bem.dh.n_dofs(),bem.dh.n_dofs());
-      DoFTools::make_sparsity_pattern (bem.dh,
-                                       csp.block(i,j),
-                                       bem.constraints);
+      // csp.block(i,j).reinit(this_cpu_set);
+      // DoFTools::make_sparsity_pattern (bem.dh,
+      //                                  csp.block(i,j),
+      //                                  bem.constraints);
+      for(auto k : this_cpu_set)
+      {
+        csp.block(i,j).add(k,k);
+      }
                                      }
   csp.compress();
 
-  jacobian_sparsity.copy_from(csp);
+  // jacobian_sparsity.copy_from(csp);
 
-  jacobian_matrix.reinit(jacobian_sparsity);
-  jacobian_preconditioner_matrix.reinit(jacobian_sparsity);
+  jacobian_matrix.reinit(this_cpu_set_double, csp, mpi_communicator);//jacobian_sparsity);
+  jacobian_preconditioner_matrix.reinit(this_cpu_set_double, csp, mpi_communicator);//(jacobian_sparsity);
 
   for(auto i : neumann_set)
     jacobian_matrix.block(0,0).set(i,i,1.0);
@@ -320,6 +325,8 @@ DAEBEM<dim>::solve_jacobian_system(const TrilinosWrappers::MPI::BlockVector &src
           tot_iteration += solver_control.last_step();
 
       }
+
+  // dst.block(1).print(std::cout);
   return 0;
 }
 
@@ -961,11 +968,15 @@ void DAEBEM<dim>::compute_errors(double t)
   Teuchos::TimeMonitor LocalTimer(*ErrorsTimerDAE);
   potential.set_time(t);
   potential_gradient.set_time(t);
+  potential_dot.set_time(t);
+  potential_gradient_dot.set_time(t);
   // We still need to communicate our results to compute the errors.
-  bem.compute_gradients(phi,dphi_dn);
+  bem.compute_gradients(solution.block(0),solution.block(1));
   Vector<double> localized_gradient_solution(bem.vector_gradients_solution);//vector_gradients_solution
-  Vector<double> localized_phi(phi);
-  Vector<double> localized_dphi_dn(dphi_dn);
+  Vector<double> localized_phi(solution.block(1));
+  Vector<double> localized_dphi_dn(solution.block(0));
+  Vector<double> localized_phi_dot(solution_dot.block(1));
+  Vector<double> localized_dphi_dn_dot(solution_dot.block(0));
   Vector<double> localised_normals(bem.vector_normals_solution);
   // Vector<double> localised_alpha(bem.alpha);
   // We let only the first processor do the error computations
@@ -976,8 +987,9 @@ void DAEBEM<dim>::compute_errors(double t)
 
       Vector<double> grad_difference_per_cell (comp_dom.tria.n_active_cells());
       std::vector<Point<dim> > support_points(bem.dh.n_dofs());
-      double phi_max_error;// = localized_phi.linfty_norm();
+      double phi_max_error, phi_dot_max_error;// = localized_phi.linfty_norm();
       Vector<double> difference_per_cell (comp_dom.tria.n_active_cells());
+      Vector<double> difference_dot_per_cell (comp_dom.tria.n_active_cells());
       DoFTools::map_dofs_to_support_points<dim-1, dim>( *bem.mapping, bem.dh, support_points);
 
       if (!have_dirichlet_bc)
@@ -1001,6 +1013,13 @@ void DAEBEM<dim>::compute_errors(double t)
 
           phi_max_error = localized_phi.linfty_norm();
 
+          VectorTools::integrate_difference (*bem.mapping, bem.dh, localized_phi_dot,
+                                             potential_dot,
+                                             difference_dot_per_cell,
+                                             QGauss<(dim-1)>(2*(2*bem.fe->degree+1)),
+                                             VectorTools::L2_norm);
+
+          phi_dot_max_error = difference_per_cell.linfty_norm();
 
         }
       else
@@ -1012,6 +1031,13 @@ void DAEBEM<dim>::compute_errors(double t)
                                              VectorTools::L2_norm);
 
           phi_max_error = difference_per_cell.linfty_norm();
+          VectorTools::integrate_difference (*bem.mapping, bem.dh, localized_phi_dot,
+                                             potential_dot,
+                                             difference_dot_per_cell,
+                                             QGauss<(dim-1)>(2*(2*bem.fe->degree+1)),
+                                             VectorTools::L2_norm);
+
+          phi_dot_max_error = difference_dot_per_cell.linfty_norm();
 
         }
       VectorTools::integrate_difference (*bem.mapping, bem.gradient_dh, localized_gradient_solution,
@@ -1021,7 +1047,8 @@ void DAEBEM<dim>::compute_errors(double t)
                                          VectorTools::L2_norm);
       const double grad_L2_error = grad_difference_per_cell.l2_norm();
 
-      const double L2_error = difference_per_cell.l2_norm();
+      const double phi_L2_error = difference_per_cell.l2_norm();
+      const double phi_dot_L2_error = difference_dot_per_cell.l2_norm();
 
 
       Vector<double> vector_gradients_node_error(bem.gradient_dh.n_dofs());
@@ -1059,6 +1086,24 @@ void DAEBEM<dim>::compute_errors(double t)
       dphi_dn_node_error*=-1.0;
       dphi_dn_node_error.add(1.,localized_dphi_dn);
 
+
+      Vector<double> dphi_dn_dot_node_error(bem.dh.n_dofs());
+      std::vector<Vector<double> > dphi_dn_dot_nodes_errs(bem.dh.n_dofs(), Vector<double> (dim));
+      potential_gradient_dot.vector_value_list(support_points,dphi_dn_dot_nodes_errs);
+      dphi_dn_dot_node_error = 0.;
+      for (types::global_dof_index i=0; i<bem.dh.n_dofs(); ++i)
+        {
+          // dphi_dn_node_error[i] = 0.;
+          for (unsigned int d=0; d<dim; ++d)
+            {
+              dphi_dn_dot_node_error[bem.original_to_sub_wise[i]] += localised_normals[bem.vec_original_to_sub_wise[i+d*bem.dh.n_dofs()]] * dphi_dn_dot_nodes_errs[bem.original_to_sub_wise[i]][d];
+
+
+            }
+        }
+      dphi_dn_dot_node_error*=-1.0;
+      dphi_dn_dot_node_error.add(1.,localized_dphi_dn_dot);
+
       // dphi_dn_node_error.print(std::cout);
       Vector<double> difference_per_cell_2(comp_dom.tria.n_active_cells());
       VectorTools::integrate_difference (*bem.mapping, bem.dh, dphi_dn_node_error,
@@ -1081,7 +1126,9 @@ void DAEBEM<dim>::compute_errors(double t)
             ;
 
       pcout<<"Phi Nodes error L_inf norm: "<<phi_max_error<<std::endl;
-      pcout<<"Phi Cells error L_2 norm: "<<L2_error<<std::endl;
+      pcout<<"Phi Cells error L_2 norm: "<<phi_L2_error<<std::endl;
+      pcout<<"Phi_dot Nodes error L_inf norm: "<<phi_dot_max_error<<std::endl;
+      pcout<<"Phi_dot Cells error L_2 norm: "<<phi_dot_L2_error<<std::endl;
       pcout<<"dPhidN Nodes error L_inf norm: "<<dphi_dn_node_error.linfty_norm()<<std::endl;
       pcout<<"dPhidN Nodes error L_2 norm: "<<dphi_dn_L2_error<<std::endl;
       pcout<<"Phi Nodes Gradient error L_inf norm: "<<grad_phi_max_error<<std::endl;

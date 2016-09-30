@@ -121,8 +121,8 @@ void Driver<dim>::run()
       }
 
     std::string filename = ( dae_bem.output_file_name);
-    dae_bem.compute_errors(0.);
-    dae_bem.output_results(filename);
+    dae_bem.compute_errors(1.);
+    // dae_bem.output_results(filename);
     // }
   }
   // Write a summary of all timers
