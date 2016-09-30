@@ -111,12 +111,12 @@ DAEBEM<dim>::set_dae_initial_conditions(TrilinosWrappers::MPI::BlockVector &xxx,
     // phi.print(std::cout);
     // dphi_dn.print(std::cout);
     // tmp_rhs_bem.print(std::cout);
-    bem.solve(phi_bem, dphi_dn_bem, tmp_rhs_bem);
+    bem.solve_system(phi_bem, dphi_dn_bem, tmp_rhs_bem);
     // Where we impose Dirichlet BC we check that the solution is equal to the prescribed one
-    for(auto i : dirichlet_set)
-    {
-      xxx.block(0)[i]=dphi_dn_bem[i];
-    }
+    // for(auto i : dirichlet_set)
+    // {
+    //   xxx.block(1)[i]=phi[i];
+    // }
     // Where we impose some kind of Neumann (dot or nor) BC we check that the solution is equal to the BEM one
     for(auto i : neumann_set_bem)
     {
@@ -129,10 +129,10 @@ DAEBEM<dim>::set_dae_initial_conditions(TrilinosWrappers::MPI::BlockVector &xxx,
     }
 
     // Where we impose Neumann BC we check that the solution is equal to the prescribed one
-    for(auto i : neumann_set)
-    {
-      xxx.block(0)[i]=dphi_dn[i];
-    }
+    // for(auto i : neumann_set)
+    // {
+    //   xxx.block(0)[i]=dphi_dn[i];
+    // }
     // Where we impose some kind of Dirichlet (dot or nor) BC we check that the solution is equal to the BEM one
     for(auto i : dirichlet_set_bem)
     {
@@ -369,7 +369,7 @@ DAEBEM<dim>::residual(const double t,
   // solution_dot.block(0).print(std::cout);
   // dphi_dn.print(std::cout);
   // tmp_rhs_bem.print(std::cout);
-  bem.solve(phi_bem, dphi_dn_bem, tmp_rhs_bem);
+  bem.solve_system(phi_bem, dphi_dn_bem, tmp_rhs_bem);
 
   // Where we impose Dirichlet BC we check that the solution is equal to the prescribed one
   for(auto i : dirichlet_set)
@@ -659,6 +659,19 @@ void DAEBEM<dim>::solve_problem()
 
   // ida(*this);
   compute_dae_cache();
+  if (bem.solution_method == "Direct")
+    {
+      bem.assemble_system();
+      // neumann_matrix.print(std::cout);
+      // dirichlet_matrix.print(std::cout);
+    }
+  else
+    {
+      bem.fma.generate_octree_blocking();
+      // fma.compute_m2l_flags();
+      bem.fma.direct_integrals();
+      bem.fma.multipole_integrals();
+    }
   set_dae_initial_conditions(solution, solution_dot);
   TrilinosWrappers::MPI::BlockVector try_residual(solution);
   residual(0., solution, solution_dot, try_residual);
