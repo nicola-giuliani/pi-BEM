@@ -69,15 +69,15 @@ class DAEBEM : public ParameterAcceptor
 {
   public:
   DAEBEM(ComputationalDomain<dim> &comp_dom, BEMProblem<dim> &bem, const MPI_Comm comm = MPI_COMM_WORLD):
-    potential_gradient("Potential gradient",dim,"t;1;1"),
-    potential_gradient_dot("Potential gradient time derivative",dim,"1;0;0"),
     potential("Potential",1,"t*x+y+z"),
+    potential_gradient("Potential gradient",dim,"t;1;1"),
     potential_dot("Potential time derivative",1,"x"),
+    potential_gradient_dot("Potential gradient time derivative",dim,"1;0;0"),
     comp_dom(comp_dom), bem(bem),
     mpi_communicator (comm),
     n_mpi_processes (Utilities::MPI::n_mpi_processes(mpi_communicator)),
     this_mpi_process (Utilities::MPI::this_mpi_process(mpi_communicator)),
-
+    time_step(0),
     pcout(std::cout,
           (this_mpi_process
            == 0)),
@@ -174,13 +174,15 @@ class DAEBEM : public ParameterAcceptor
 
 private:
 
-  ParsedFunction<dim> potential_gradient;
 
   ParsedFunction<dim> potential;
 
-  ParsedFunction<dim> potential_gradient_dot;
+  ParsedFunction<dim> potential_gradient;
 
   ParsedFunction<dim> potential_dot;
+
+  ParsedFunction<dim> potential_gradient_dot;
+
 
   std::string node_displacement_type;
 
@@ -222,6 +224,8 @@ private:
   IndexSet differential_set;
 
   bool jacobian_direct_resolution;
+
+  unsigned int time_step;
 
   ConditionalOStream pcout;
 

@@ -1639,8 +1639,6 @@ void BEMProblem<dim>::compute_gradients(const TrilinosWrappers::MPI::Vector &glo
   phi.reinit(glob_phi,false,true);
   TrilinosWrappers::MPI::Vector dphi_dn(ghosted_set);
   dphi_dn.reinit(glob_dphi_dn,false,true);
-
-
   // We reinit the gradient solution
   vector_gradients_solution.reinit(vector_this_cpu_set,mpi_communicator);
 
@@ -1766,6 +1764,7 @@ void BEMProblem<dim>::compute_gradients(const TrilinosWrappers::MPI::Vector &glo
   SolverGMRES<TrilinosWrappers::MPI::Vector > solver (solver_control,
                                                       SolverGMRES<TrilinosWrappers::MPI::Vector >::AdditionalData(50));
 
+  vector_gradients_solution=0.;
   solver.solve (vector_gradients_matrix, vector_gradients_solution, vector_gradients_rhs, PreconditionIdentity());
 
   vector_constraints.distribute(vector_gradients_solution);

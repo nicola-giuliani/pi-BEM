@@ -103,15 +103,21 @@ DAEBEM<dim>::set_dae_initial_conditions(TrilinosWrappers::MPI::BlockVector &xxx,
     TrilinosWrappers::MPI::Vector dphi_dn_bem(xxx.block(0));
 
     TrilinosWrappers::MPI::Vector tmp_rhs_bem(this_cpu_set, mpi_communicator);
+
+    // std::vector<Point<dim> > support_points(bem.dh.n_dofs());
+    // DoFTools::map_dofs_to_support_points<dim-1, dim>( *bem.mapping, bem.dh, support_points);
+
     for(auto i : neumann_set_bem)
     {
       tmp_rhs_bem[i]=dphi_dn[i];
       xxx.block(0)[i]=dphi_dn[i];
+      // pcout<<i<<" Neumann : "<<support_points[i]<<" tmp_rhs_bem "<<tmp_rhs_bem[i]<<" phi_N "<<dphi_dn[i]<<std::endl;
     }
     for(auto i : dirichlet_set_bem)
     {
       tmp_rhs_bem[i]=phi[i];
       xxx.block(1)[i]=phi[i];
+      // pcout<<i<<" Dirichlet : "<<support_points[i]<<" tmp_rhs_bem "<<tmp_rhs_bem[i]<<std::endl;
     }
     // phi.print(std::cout);
     // dphi_dn.print(std::cout);
@@ -126,6 +132,7 @@ DAEBEM<dim>::set_dae_initial_conditions(TrilinosWrappers::MPI::BlockVector &xxx,
     for(auto i : neumann_set_bem)
     {
       xxx.block(1)[i]=phi_bem[i];
+      // pcout<<i<<" Computed Phi : "<<support_points[i]<<" tmp_rhs_bem "<<phi_bem[i]<<std::endl;
     }
     // Where we impose Dirichlet dot BC we check that the solution is equal to the prescribed one
     for(auto i : dirichlet_dot_set)
@@ -142,6 +149,7 @@ DAEBEM<dim>::set_dae_initial_conditions(TrilinosWrappers::MPI::BlockVector &xxx,
     for(auto i : dirichlet_set_bem)
     {
       xxx.block(0)[i]=dphi_dn_bem[i];
+      // pcout<<i<<" Computed dPhidN : "<<support_points[i]<<" tmp_rhs_bem "<<dphi_dn_bem[i]<<std::endl;
     }
     // Where we impose Neumann dot BC we check that the solution is equal to the prescribed one
     for(auto i : neumann_dot_set)
@@ -184,6 +192,16 @@ void DAEBEM<dim>::output_step(const double t,
   const Vector<double> localized_dphi_dn (solution.block(0));
   const Vector<double> localized_phi_dot (solution_dot.block(1));
   const Vector<double> localized_dphi_dn_dot (solution_dot.block(0));
+  const Vector<double> localized_alpha (bem.alpha);
+
+  // bem.vector_gradients_solution=0.;
+  // bem.compute_surface_gradients(solution.block(1));
+  bem.compute_gradients(solution.block(1),solution.block(0));
+
+  const Vector<double> localized_gradients (bem.vector_gradients_solution);
+  const Vector<double> localized_surf_gradients (bem.vector_surface_gradients_solution);
+  const Vector<double> localized_normals (bem.vector_normals_solution);
+
   // localized_dphi_dn.print(std::cout);
   // localized_phi.print(std::cout);
 
@@ -198,7 +216,7 @@ void DAEBEM<dim>::output_step(const double t,
         {
           phi_ex[i]=potential.value(support_points[i]);
         }
-      std::string filename_ida = "dae_step_output_"+Utilities::to_string(t)+".vtu";//+Utilities::int_to_string(step_number)+".vtu";
+      std::string filename_ida = "dae_step_output_"+Utilities::int_to_string(time_step)+".vtu";//+Utilities::int_to_string(step_number)+".vtu";
 
       DataOut<dim-1, DoFHandler<dim-1, dim> > dataout_ida;
 
@@ -211,15 +229,40 @@ void DAEBEM<dim>::output_step(const double t,
       dataout_ida.add_data_vector(localized_dphi_dn, "dphi_dn", DataOut<dim-1, DoFHandler<dim-1, dim> >::type_dof_data);
       dataout_ida.add_data_vector(localized_phi_dot, "phi_dot", DataOut<dim-1, DoFHandler<dim-1, dim> >::type_dof_data);
       dataout_ida.add_data_vector(localized_dphi_dn_dot, "dphi_dn_dot", DataOut<dim-1, DoFHandler<dim-1, dim> >::type_dof_data);
+      dataout_ida.add_data_vector(localized_alpha, "alpha_bem", DataOut<dim-1, DoFHandler<dim-1, dim> >::type_dof_data);
       dataout_ida.build_patches(*bem.mapping,
-                                   bem.mapping_degree,
-                                   DataOut<dim-1, DoFHandler<dim-1, dim> >::curved_inner_cells);
+                                 bem.mapping_degree,
+                                 DataOut<dim-1, DoFHandler<dim-1, dim> >::curved_inner_cells);
 
       std::ofstream file_ida(filename_ida.c_str());
 
       dataout_ida.write_vtu(file_ida);
-    }
 
+
+      std::string filename_ida_vector = "dae_vector_step_output_"+Utilities::int_to_string(time_step)+".vtu";//+Utilities::int_to_string(step_number)+".vtu";
+
+      std::vector<DataComponentInterpretation::DataComponentInterpretation>
+      data_component_interpretation
+      (dim, DataComponentInterpretation::component_is_part_of_vector);
+
+      DataOut<dim-1, DoFHandler<dim-1, dim> > dataout_vector;
+
+      dataout_vector.attach_dof_handler(bem.gradient_dh);
+
+      dataout_vector.add_data_vector(localized_gradients, std::vector<std::string > (dim,"phi_gradient"), DataOut<dim-1, DoFHandler<dim-1, dim> >::type_dof_data, data_component_interpretation);
+      dataout_vector.add_data_vector(localized_surf_gradients, std::vector<std::string > (dim,"phi_surf_gradient"), DataOut<dim-1, DoFHandler<dim-1, dim> >::type_dof_data, data_component_interpretation);
+      dataout_vector.add_data_vector(localized_normals, std::vector<std::string > (dim,"normals_at_nodes"), DataOut<dim-1, DoFHandler<dim-1, dim> >::type_dof_data, data_component_interpretation);
+
+      dataout_vector.build_patches(*bem.mapping,
+                                   bem.mapping_degree,
+                                   DataOut<dim-1, DoFHandler<dim-1, dim> >::curved_inner_cells);
+
+      std::ofstream file_vector(filename_ida_vector.c_str());
+
+      dataout_vector.write_vtu(file_vector);
+
+    }
+  ++time_step;
   return;
 }
 
@@ -925,9 +968,9 @@ void DAEBEM<dim>::get_boundary_conditions(double t)
   }
   for(auto i : this_cpu_set)
   {
+    dphi_dn[i]=0.;
     Vector<double> imposed_pot_grad(dim);
     potential_gradient.vector_value(support_points[i],imposed_pot_grad);
-    dphi_dn[i]=0.;
     types::global_dof_index dummy = bem.sub_wise_to_original[i];
     for(unsigned int d=0; d<dim; ++d)
     {
@@ -936,7 +979,10 @@ void DAEBEM<dim>::get_boundary_conditions(double t)
       Assert(bem.vector_this_cpu_set.is_element(vec_index), ExcMessage("vector cpu set and cpu set are inconsistent"));
       // Assert(support_points[local_dof_indices[j]]==vec_support_points[vec_index], ExcMessage("the support points of dh and gradient_dh are different"));
       dphi_dn[i] += imposed_pot_grad[d]*bem.vector_normals_solution[vec_index];
+      // if(t==0)
+      //   pcout<<i<<" point "<<support_points[i]<<" grad_d "<<imposed_pot_grad[d]<<" normal_d "<<bem.vector_normals_solution[vec_index]<<" phi_n "<<dphi_dn[i]<<std::endl;
     }
+    // std::cout<<std::endl;
   }
   for(auto i : this_cpu_set)
   {
@@ -946,8 +992,7 @@ void DAEBEM<dim>::get_boundary_conditions(double t)
   {
     dphi_dn_dot[i] = 0;
     Vector<double> imposed_pot_grad_dot(dim);
-    potential_gradient.vector_value(support_points[i],imposed_pot_grad_dot);
-    dphi_dn[i]=0.;
+    potential_gradient_dot.vector_value(support_points[i],imposed_pot_grad_dot);
     types::global_dof_index dummy = bem.sub_wise_to_original[i];
     for(unsigned int d=0; d<dim; ++d)
     {
@@ -971,7 +1016,7 @@ void DAEBEM<dim>::compute_errors(double t)
   potential_dot.set_time(t);
   potential_gradient_dot.set_time(t);
   // We still need to communicate our results to compute the errors.
-  bem.compute_gradients(solution.block(0),solution.block(1));
+  bem.compute_gradients(solution.block(1),solution.block(0));
   Vector<double> localized_gradient_solution(bem.vector_gradients_solution);//vector_gradients_solution
   Vector<double> localized_phi(solution.block(1));
   Vector<double> localized_dphi_dn(solution.block(0));
