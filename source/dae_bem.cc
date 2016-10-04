@@ -13,6 +13,31 @@ RCP<Time> OutputTimerDAE = Teuchos::TimeMonitor::getNewTimer("Output");
 RCP<Time> ResidualTimerDAE = Teuchos::TimeMonitor::getNewTimer("Residual");
 
 
+template <int dim>
+void DAEBEM<dim>::compute_jacobian_sparsity_pattern(const DoFHandler<dim-1, dim> &dh, const TrilinosWrappers::MPI::BlockVector &src_yy, BlockDynamicSparsityPattern &dsp)
+{
+  dsp.reinit(this_cpu_set_double);
+  unsigned int this_mpi_process=0;
+  ConstraintMatrix constraints;
+  constraints.clear();
+
+  for(unsigned int i=0; i<src_yy.n_blocks(); ++i)
+    for(unsigned int j=0; j<src_yy.n_blocks(); ++j)
+    {
+      // DoFTools::make_sparsity_pattern (dh, dsp.block(i,j), constraints, true, this_mpi_process);
+      // csp.block(i,j).reinit(this_cpu_set);
+      // DoFTools::make_sparsity_pattern (bem.dh,
+      //                                  csp.block(i,j),
+      //                                  bem.constraints);
+      for(auto k : src_yy.block(0).locally_owned_elements())
+      {
+        dsp.block(i,j).add(k,k);
+      }
+    }
+  dsp.compress();
+
+}
+
 
 template <int dim>
 int
@@ -24,25 +49,16 @@ DAEBEM<dim>::setup_jacobian(const double t,
   pcout<<"setting up Jacobian"<<std::endl;
   BlockDynamicSparsityPattern csp(src_yp.n_blocks(), src_yy.n_blocks());
 
-  csp.reinit(this_cpu_set_double);
-  for(unsigned int i=0; i<src_yp.n_blocks(); ++i)
-    for(unsigned int j=0; j<src_yy.n_blocks(); ++j)
-    {
-      // csp.block(i,j).reinit(this_cpu_set);
-      // DoFTools::make_sparsity_pattern (bem.dh,
-      //                                  csp.block(i,j),
-      //                                  bem.constraints);
-      for(auto k : this_cpu_set)
-      {
-        csp.block(i,j).add(k,k);
-      }
-                                     }
-  csp.compress();
-
-  // jacobian_sparsity.copy_from(csp);
-
-  jacobian_matrix.reinit(this_cpu_set_double, csp, mpi_communicator);//jacobian_sparsity);
-  jacobian_preconditioner_matrix.reinit(this_cpu_set_double, csp, mpi_communicator);//(jacobian_sparsity);
+  if(compute_sparsity)
+  {
+    compute_jacobian_sparsity_pattern(bem.dh, src_yy, csp);
+    compute_sparsity=false;
+    jacobian_matrix.reinit(this_cpu_set_double, csp, mpi_communicator);//jacobian_sparsity);
+    jacobian_preconditioner_matrix.reinit(this_cpu_set_double, csp, mpi_communicator);//(jacobian_sparsity);
+  }
+  //
+  // // jacobian_sparsity.copy_from(csp);
+  //
 
   for(auto i : neumann_set)
     jacobian_matrix.block(0,0).set(i,i,1.0);
@@ -99,9 +115,11 @@ void
 DAEBEM<dim>::set_dae_initial_conditions(TrilinosWrappers::MPI::BlockVector &xxx, TrilinosWrappers::MPI::BlockVector &xxx_dot)
 {
     get_boundary_conditions(0.);
-    TrilinosWrappers::MPI::Vector phi_bem(xxx.block(1));
-    TrilinosWrappers::MPI::Vector dphi_dn_bem(xxx.block(0));
+    MPI_Barrier(mpi_communicator);
 
+    std::cout<<"dsoifapij"<<std::endl;
+    TrilinosWrappers::MPI::Vector phi_bem(this_cpu_set, mpi_communicator);
+    TrilinosWrappers::MPI::Vector dphi_dn_bem(this_cpu_set, mpi_communicator);
     TrilinosWrappers::MPI::Vector tmp_rhs_bem(this_cpu_set, mpi_communicator);
 
     // std::vector<Point<dim> > support_points(bem.dh.n_dofs());
@@ -122,6 +140,7 @@ DAEBEM<dim>::set_dae_initial_conditions(TrilinosWrappers::MPI::BlockVector &xxx,
     // phi.print(std::cout);
     // dphi_dn.print(std::cout);
     // tmp_rhs_bem.print(std::cout);
+    std::cout<<"dsoifapij"<<std::endl;
     bem.solve_system(phi_bem, dphi_dn_bem, tmp_rhs_bem);
     // Where we impose Dirichlet BC we check that the solution is equal to the prescribed one
     // for(auto i : dirichlet_set)
@@ -722,6 +741,7 @@ void DAEBEM<dim>::solve_problem()
       bem.fma.direct_integrals();
       bem.fma.multipole_integrals();
     }
+  std::cout<<"setting up initial conditions"<<std::endl;
   set_dae_initial_conditions(solution, solution_dot);
   TrilinosWrappers::MPI::BlockVector try_residual(solution);
   residual(0., solution, solution_dot, try_residual);
@@ -962,10 +982,13 @@ void DAEBEM<dim>::get_boundary_conditions(double t)
   cell = bem.dh.begin_active(),
   endc = bem.dh.end();
 
+  std::cout<<"dsoifapij"<<std::endl;
+
   for(auto i : this_cpu_set)
   {
     phi[i] = potential.value(support_points[i]);
   }
+  std::cout<<"setted phi"<<std::endl;
   for(auto i : this_cpu_set)
   {
     dphi_dn[i]=0.;
@@ -984,10 +1007,12 @@ void DAEBEM<dim>::get_boundary_conditions(double t)
     }
     // std::cout<<std::endl;
   }
+  std::cout<<"setted phin"<<std::endl;
   for(auto i : this_cpu_set)
   {
     phi_dot[i] = potential_dot.value(support_points[i], 0);
   }
+  std::cout<<"setted phi dot"<<std::endl;
   for(auto i : this_cpu_set)
   {
     dphi_dn_dot[i] = 0;
@@ -1004,6 +1029,8 @@ void DAEBEM<dim>::get_boundary_conditions(double t)
     }
 
   }
+  std::cout<<"setted phin dot"<<std::endl;
+  return;
 
 }
 

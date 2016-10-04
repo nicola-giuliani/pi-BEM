@@ -83,6 +83,7 @@ class DAEBEM : public ParameterAcceptor
            == 0)),
     data_out_scalar("Scalar data out", "vtu"),
     data_out_vector("Vector data out", "vtu"),
+    compute_sparsity(true),
     lambdas(*this)
   {
     lambdas.initialize_dae(*this);
@@ -110,6 +111,8 @@ class DAEBEM : public ParameterAcceptor
                        const TrilinosWrappers::MPI::BlockVector &src_yp,
                        TrilinosWrappers::MPI::BlockVector &dst);
 
+
+  void compute_jacobian_sparsity_pattern(const DoFHandler<dim-1, dim> &dh, const TrilinosWrappers::MPI::BlockVector &src_yy, BlockDynamicSparsityPattern &dsp);
   /** Setup Jacobian system and preconditioner. */
   virtual int setup_jacobian(const double t,
                              const TrilinosWrappers::MPI::BlockVector &src_yy,
@@ -232,6 +235,7 @@ private:
   ParsedDataOut<dim-1, dim> data_out_scalar;
   ParsedDataOut<dim-1, dim> data_out_vector;
 
+  bool compute_sparsity;
   BlockSparsityPattern jacobian_sparsity;
   TrilinosWrappers::BlockSparseMatrix jacobian_matrix;
   // TrilinosWrappers::BlockSparseMatrix jacobian_preconditioner_op;
