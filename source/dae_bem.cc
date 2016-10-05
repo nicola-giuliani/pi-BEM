@@ -94,7 +94,7 @@ DAEBEM<dim>::setup_jacobian(const double t,
   //   for(unsigned int j=0; j<src_yy.n_blocks(); ++j)
   //     jacobian_preconditioner_matrix.block(i,j).reinit(TrilinosWrappers::PreconditionJacobi(jacobian_matrix.block(i,j)));
 
-  for(types::global_dof_index i = 0; i<bem.dh.n_dofs(); ++i)
+  for(auto i : this_cpu_set)
   {
     jacobian_preconditioner_matrix.block(0,0).set(i,i,1.);
     // jacobian_preconditioner_matrix.block(0,1).set(i,i,1.);
@@ -102,7 +102,56 @@ DAEBEM<dim>::setup_jacobian(const double t,
     jacobian_preconditioner_matrix.block(1,1).set(i,i,1.);
   }
 
+  Mp_preconditioner_block_0.reset  (new TrilinosWrappers::PreconditionJacobi());
+  Mp_preconditioner_block_1.reset  (new TrilinosWrappers::PreconditionJacobi());
+  // The basic blocks for the preconditioner
+  Mp_preconditioner_block_0->initialize  (jacobian_preconditioner_matrix.block(0,0));
+  Mp_preconditioner_block_1->initialize  (jacobian_preconditioner_matrix.block(1,1));
 
+
+  // SYSTEM MATRIX LINEAR OPERATOR:
+  // const unsigned int n_block_cols = jacobian_matrix.n_block_cols();
+  // const unsigned int n_block_rows = jacobian_matrix.n_block_rows();
+
+  Assert(jacobian_matrix.n_block_rows()==2,ExcMessage("Inconsistent with the number of blocks for the rows."));
+  Assert(jacobian_matrix.n_block_cols()==2,ExcMessage("Inconsistent with the number of blocks for the cols."));
+  std::array<std::array<LinearOperator<TrilinosWrappers::MPI::Vector>, 2>, 2> S;
+  for (unsigned int i = 0; i<jacobian_matrix.n_block_rows(); ++i)
+    for (unsigned int j = 0; j<jacobian_matrix.n_block_cols(); ++j)
+      S[i][j] = linear_operator< TrilinosWrappers::MPI::Vector >( jacobian_matrix.block(i,j) );
+
+  jacobian_op = BlockLinearOperator<TrilinosWrappers::MPI::BlockVector>(S);
+
+  // PRECONDITIONER LINEAR OPERATOR:
+  std::array<std::array<LinearOperator<TrilinosWrappers::MPI::Vector>, 2>, 2> P;
+  for (unsigned int i = 0; i<jacobian_preconditioner_matrix.n_block_rows(); ++i)
+    for (unsigned int j = 0; j<jacobian_preconditioner_matrix.n_block_cols(); ++j)
+      P[i][j] = linear_operator< TrilinosWrappers::MPI::Vector >( jacobian_preconditioner_matrix.block(i,j) );
+
+  static ReductionControl solver_control_pre(5000, 1e-8);
+  static SolverGMRES<TrilinosWrappers::MPI::Vector> solver_GMRES(solver_control_pre);
+
+  for (unsigned int i = 0; i<2; ++i)
+    for (unsigned int j = 0; j<2; ++j)
+      if (i!=j)
+        P[i][j] = null_operator< TrilinosWrappers::MPI::Vector >(P[i][j]);
+
+  // P[0][0] = inverse_operator< >(  S[0][0],
+  //                                 SolverGMRES,
+  //                                 *Amg_preconditioner);
+  P[0][0] = linear_operator< TrilinosWrappers::MPI::Vector >(  jacobian_preconditioner_matrix.block(0,0));
+  P[1][1] = linear_operator< TrilinosWrappers::MPI::Vector >(  jacobian_preconditioner_matrix.block(1,1));
+                                  // solver_GMRES,
+                                  // *Mp_preconditioner_block_0);
+
+  // P[1][1] = inverse_operator< >(  jacobian_preconditioner_matrix.block(1,1),
+  //                                 solver_GMRES,
+  //                                 *Mp_preconditioner_block_1);
+
+  jacobian_preconditioner_op = BlockLinearOperator<TrilinosWrappers::MPI::BlockVector>(P);
+  // block_forward_substitution< >(
+  //                                BlockLinearOperator<TrilinosWrappers::MPI::BlockVector>(S),
+  //                                BlockLinearOperator<TrilinosWrappers::MPI::BlockVector>(P));
 
 
 
@@ -379,7 +428,7 @@ DAEBEM<dim>::solve_jacobian_system(const TrilinosWrappers::MPI::BlockVector &src
           solver(solver_control, mem,
                  typename SolverFGMRES<TrilinosWrappers::MPI::BlockVector>::AdditionalData(50, true));
 
-          auto S_inv = inverse_operator(jacobian_matrix, solver, jacobian_preconditioner_matrix);
+          auto S_inv = inverse_operator(jacobian_op, solver, jacobian_preconditioner_op);
           S_inv.vmult(dst, src);
 
           tot_iteration += solver_control.last_step();

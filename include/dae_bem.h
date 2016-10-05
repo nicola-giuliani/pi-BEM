@@ -17,6 +17,7 @@
 #include<deal.II/lac/solver_gmres.h>
 #include<deal.II/lac/precondition.h>
 #include <deal.II/lac/linear_operator.h>
+#include <deal.II/lac/block_linear_operator.h>
 
 #include<deal.II/grid/tria.h>
 #include<deal.II/grid/tria_iterator.h>
@@ -238,8 +239,17 @@ private:
   bool compute_sparsity;
   BlockSparsityPattern jacobian_sparsity;
   TrilinosWrappers::BlockSparseMatrix jacobian_matrix;
-  // TrilinosWrappers::BlockSparseMatrix jacobian_preconditioner_op;
   TrilinosWrappers::BlockSparseMatrix jacobian_preconditioner_matrix;
+
+  // The linear operators for the jacobian matrix and its preconditioner
+  LinearOperator<TrilinosWrappers::MPI::BlockVector> jacobian_preconditioner_op;
+  LinearOperator<TrilinosWrappers::MPI::BlockVector> jacobian_op;
+
+  // The building blocks for the preconditioner for the jacobian matrix
+  shared_ptr<TrilinosWrappers::PreconditionJacobi> Mp_preconditioner_block_0;
+  shared_ptr<TrilinosWrappers::PreconditionJacobi> Mp_preconditioner_block_1;
+
+
 
   IDAInterface<TrilinosWrappers::MPI::BlockVector> ida;
   IMEXStepper<TrilinosWrappers::MPI::BlockVector> imex;
