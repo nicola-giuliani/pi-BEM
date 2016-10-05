@@ -117,7 +117,6 @@ DAEBEM<dim>::set_dae_initial_conditions(TrilinosWrappers::MPI::BlockVector &xxx,
     get_boundary_conditions(0.);
     MPI_Barrier(mpi_communicator);
 
-    std::cout<<"dsoifapij"<<std::endl;
     TrilinosWrappers::MPI::Vector phi_bem(this_cpu_set, mpi_communicator);
     TrilinosWrappers::MPI::Vector dphi_dn_bem(this_cpu_set, mpi_communicator);
     TrilinosWrappers::MPI::Vector tmp_rhs_bem(this_cpu_set, mpi_communicator);
@@ -140,7 +139,6 @@ DAEBEM<dim>::set_dae_initial_conditions(TrilinosWrappers::MPI::BlockVector &xxx,
     // phi.print(std::cout);
     // dphi_dn.print(std::cout);
     // tmp_rhs_bem.print(std::cout);
-    std::cout<<"dsoifapij"<<std::endl;
     bem.solve_system(phi_bem, dphi_dn_bem, tmp_rhs_bem);
     // Where we impose Dirichlet BC we check that the solution is equal to the prescribed one
     // for(auto i : dirichlet_set)
@@ -982,16 +980,15 @@ void DAEBEM<dim>::get_boundary_conditions(double t)
   cell = bem.dh.begin_active(),
   endc = bem.dh.end();
 
-  std::cout<<"dsoifapij"<<std::endl;
 
   for(auto i : this_cpu_set)
   {
     phi[i] = potential.value(support_points[i]);
   }
-  std::cout<<"setted phi"<<std::endl;
+  phi.compress(VectorOperation::insert);
   for(auto i : this_cpu_set)
   {
-    dphi_dn[i]=0.;
+    dphi_dn[i]-=dphi_dn[i];
     Vector<double> imposed_pot_grad(dim);
     potential_gradient.vector_value(support_points[i],imposed_pot_grad);
     types::global_dof_index dummy = bem.sub_wise_to_original[i];
@@ -1007,15 +1004,15 @@ void DAEBEM<dim>::get_boundary_conditions(double t)
     }
     // std::cout<<std::endl;
   }
-  std::cout<<"setted phin"<<std::endl;
+  dphi_dn.compress(VectorOperation::add);
   for(auto i : this_cpu_set)
   {
     phi_dot[i] = potential_dot.value(support_points[i], 0);
   }
-  std::cout<<"setted phi dot"<<std::endl;
+  phi_dot.compress(VectorOperation::insert);
   for(auto i : this_cpu_set)
   {
-    dphi_dn_dot[i] = 0;
+    dphi_dn_dot[i] -= dphi_dn_dot[i];
     Vector<double> imposed_pot_grad_dot(dim);
     potential_gradient_dot.vector_value(support_points[i],imposed_pot_grad_dot);
     types::global_dof_index dummy = bem.sub_wise_to_original[i];
@@ -1029,7 +1026,7 @@ void DAEBEM<dim>::get_boundary_conditions(double t)
     }
 
   }
-  std::cout<<"setted phin dot"<<std::endl;
+  dphi_dn_dot.compress(VectorOperation::add);
   return;
 
 }
