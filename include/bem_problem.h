@@ -120,6 +120,8 @@ public:
   void solve(TrilinosWrappers::MPI::Vector &phi, TrilinosWrappers::MPI::Vector &dphi_dn,
              const TrilinosWrappers::MPI::Vector &tmp_rhs);
 
+  void solve_pure_neumann(TrilinosWrappers::MPI::Vector &phi,const TrilinosWrappers::MPI::Vector &dphi_dn);
+
   /// This function takes care of the proper initialization of all the elements needed
   /// by the bem problem class. Since we need to sum elements associated with scalar
   /// and vectorial Finite Element spaces we have chosen to renumber the dofs and force the

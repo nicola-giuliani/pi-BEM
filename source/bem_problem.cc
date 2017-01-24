@@ -542,11 +542,20 @@ void BEMProblem<dim>::assemble_system()
 
 
 
-  std::vector<QTelles<dim-1> > sing_quadratures;
+  std::vector<Quadrature<dim-1> > sing_quadratures;
   for (unsigned int i=0; i<fe->dofs_per_cell; ++i)
-    sing_quadratures.push_back
-    (QTelles<dim-1>(singular_quadrature_order,
-                    fe->get_unit_support_points()[i]));
+  {
+    if(fe->degree > 1)
+    {
+      sing_quadratures.push_back(QIterated<dim-1>(QGauss<1> (singular_quadrature_order),fe->degree));
+    }
+    else
+    {
+      sing_quadratures.push_back
+      (QTelles<dim-1>(singular_quadrature_order,
+                      fe->get_unit_support_points()[i]));
+    }
+  }
 
   // Usage of alternative singular quadrature formula
   // std::vector<QGaussOneOverR<dim-1> > sing_quadratures;
@@ -1315,6 +1324,20 @@ void BEMProblem<dim>::solve(TrilinosWrappers::MPI::Vector &phi, TrilinosWrappers
 
 }
 
+// This method performs a Bem resolution,
+// either in a direct or multipole method
+// ONLY for a pure Neumann method performing
+// a sort of fixed point method
+template <int dim>
+void BEMProblem<dim>::solve_pure_neumann(TrilinosWrappers::MPI::Vector &phi, const TrilinosWrappers::MPI::Vector &dphi_dn)
+{
+  // dirichlet_matrix.vmult(dst, serv_dphi_dn);
+  // dst *= -1;
+  // neumann_matrix.vmult_add(dst, serv_phi);
+  // serv_phi.scale(alpha);
+  // dst += serv_phi;
+
+}
 
 template <int dim>
 void BEMProblem<dim>::compute_constraints(IndexSet &c_cpu_set, ConstraintMatrix &c, const TrilinosWrappers::MPI::Vector &tmp_rhs)
