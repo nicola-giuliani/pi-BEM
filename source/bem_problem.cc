@@ -2028,7 +2028,7 @@ void BEMProblem<dim>::adaptive_refinement(const TrilinosWrappers::MPI::Vector &e
 
   KellyErrorEstimator<dim-1, dim>::estimate (*mapping,
                                              dh,
-                                             QGauss<dim-2> (3),
+                                             QGauss<dim-2> (15),
                                              typename FunctionMap<dim>::type(),
                                              helper,
                                              estimated_error_per_cell);

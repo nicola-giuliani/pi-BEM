@@ -107,6 +107,8 @@ private:
 
   Functions::ParsedFunction<dim> potential;
 
+  Functions::ParsedFunction<dim> potential_normal_derivative;
+
   std::string node_displacement_type;
 
   SolverControl solver_control;
@@ -137,6 +139,8 @@ private:
 
   ParsedDataOut<dim-1, dim> data_out_scalar;
   ParsedDataOut<dim-1, dim> data_out_vector;
+
+  bool analytical_dphi_dn;
 
 };
 

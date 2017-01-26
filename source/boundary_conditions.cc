@@ -91,6 +91,25 @@ void BoundaryConditions<dim>::declare_parameters(ParameterHandler &prm)
   }
   prm.leave_subsection();
 
+  prm.enter_subsection("Potential normal derivative 2d");
+  {
+    Functions::ParsedFunction<2>::declare_parameters(prm);
+    prm.set("Function expression", "x+y");
+  }
+  prm.leave_subsection();
+
+  prm.enter_subsection("Potential normal derivative 3d");
+  {
+    Functions::ParsedFunction<3>::declare_parameters(prm);
+    prm.set("Function expression", "x+y+z");
+  }
+  prm.leave_subsection();
+
+  add_parameter(prm, &analytical_dphi_dn, "Use Analytical potential normal derivative","true", Patterns::Bool());
+
+
+
+
 }
 
 template <int dim>
@@ -111,6 +130,12 @@ void BoundaryConditions<dim>::parse_parameters(ParameterHandler &prm)
                        Utilities::int_to_string(dim)+std::string("d"));
   {
     potential.parse_parameters(prm);
+  }
+  prm.leave_subsection();
+  prm.enter_subsection(std::string("Potential normal derivative ")+
+                       Utilities::int_to_string(dim)+std::string("d"));
+  {
+    potential_normal_derivative.parse_parameters(prm);
   }
   prm.leave_subsection();
 
@@ -185,6 +210,7 @@ void BoundaryConditions<dim>::solve_problem()
 
 
   potential.set_time(0);
+  potential_normal_derivative.set_time(0);
   wind.set_time(0);
 
   const types::global_dof_index n_dofs =  bem.dh.n_dofs();
@@ -281,6 +307,7 @@ void BoundaryConditions<dim>::prepare_bem_vectors()
                 //tmp_rhs(local_dof_indices[j]) = node_coors[j](0);
                 phi(local_dof_indices[j]) = potential.value(support_points[local_dof_indices[j]]);
                 tmp_rhs(local_dof_indices[j]) = potential.value(support_points[local_dof_indices[j]]);
+                bem.pcout<<"DIRICHLET"<<std::endl;
                 //bem.pcout<<"internalElse "<<local_dof_indices[j]<<" norm ("<<node_normals[j]<<")  "<<" pos ("<<node_coors[j]<<")    "<<node_coors[j](0)<<std::endl;
               }
             else
@@ -296,25 +323,33 @@ void BoundaryConditions<dim>::prepare_bem_vectors()
                   {
                     //tmp_rhs(local_dof_indices[j]) = normals_sys_solution(local_dof_indices[j]);
                     //dphi_dn(local_dof_indices[j]) = normals_sys_solution(local_dof_indices[j]);
-                    Vector<double> imposed_pot_grad(dim);
-                    wind.vector_value(support_points[local_dof_indices[j]],imposed_pot_grad);
-                    // Point<dim> imposed_potential_gradient;
-                    double tmp_dphi_dn = 0;
-                    double normy = 0;
-                    double tol = 1e-1;
-                    for (unsigned int d=0; d<dim; ++d)
-                      {
-                        types::global_dof_index dummy = bem.sub_wise_to_original[local_dof_indices[j]];
-                        types::global_dof_index vec_index = bem.vec_original_to_sub_wise[bem.gradient_dh.n_dofs()/dim*d+dummy];//bem.vector_start_per_process[this_mpi_process] + d*bem.this_cpu_set.n_elements() + local_dof_indices[j]-bem.start_per_process[this_mpi_process];//bem.gradient_dh.n_dofs()/dim*d+local_dof_indices[j];//bem.vector_start_per_process[this_mpi_process]+((local_dof_indices[j]-bem.start_per_process[this_mpi_process])*dim+d); //local_dof_indices[j]*dim+d;
-                        // std::cout<<this_mpi_process<<" "<<support_points[local_dof_indices[j]]<<" "<<vec_support_points[vec_index]<<std::endl;
-                        Assert(bem.vector_this_cpu_set.is_element(vec_index), ExcMessage("vector cpu set and cpu set are inconsistent"));
-                        // Assert(support_points[local_dof_indices[j]]==vec_support_points[vec_index], ExcMessage("the support points of dh and gradient_dh are different"));
-                        tmp_dphi_dn += imposed_pot_grad[d]*bem.vector_normals_solution[vec_index];
-                        normy += bem.vector_normals_solution[vec_index] * bem.vector_normals_solution[vec_index];
-                      }
-                    Assert(std::fabs(normy-1.)<tol, ExcMessage("you are using wrongly the normal vector"));
-                    tmp_rhs(local_dof_indices[j]) = tmp_dphi_dn;
-                    dphi_dn(local_dof_indices[j]) = tmp_dphi_dn;
+                    if(analytical_dphi_dn)
+                    {
+                      dphi_dn(local_dof_indices[j]) = potential_normal_derivative.value(support_points[local_dof_indices[j]]);
+                      tmp_rhs(local_dof_indices[j]) = potential_normal_derivative.value(support_points[local_dof_indices[j]]);
+                    }
+                    else
+                    {
+                      Vector<double> imposed_pot_grad(dim);
+                      wind.vector_value(support_points[local_dof_indices[j]],imposed_pot_grad);
+                      // Point<dim> imposed_potential_gradient;
+                      double tmp_dphi_dn = 0;
+                      double normy = 0;
+                      double tol = 1e-1;
+                      for (unsigned int d=0; d<dim; ++d)
+                        {
+                          types::global_dof_index dummy = bem.sub_wise_to_original[local_dof_indices[j]];
+                          types::global_dof_index vec_index = bem.vec_original_to_sub_wise[bem.gradient_dh.n_dofs()/dim*d+dummy];//bem.vector_start_per_process[this_mpi_process] + d*bem.this_cpu_set.n_elements() + local_dof_indices[j]-bem.start_per_process[this_mpi_process];//bem.gradient_dh.n_dofs()/dim*d+local_dof_indices[j];//bem.vector_start_per_process[this_mpi_process]+((local_dof_indices[j]-bem.start_per_process[this_mpi_process])*dim+d); //local_dof_indices[j]*dim+d;
+                          // std::cout<<this_mpi_process<<" "<<support_points[local_dof_indices[j]]<<" "<<vec_support_points[vec_index]<<std::endl;
+                          Assert(bem.vector_this_cpu_set.is_element(vec_index), ExcMessage("vector cpu set and cpu set are inconsistent"));
+                          // Assert(support_points[local_dof_indices[j]]==vec_support_points[vec_index], ExcMessage("the support points of dh and gradient_dh are different"));
+                          tmp_dphi_dn += imposed_pot_grad[d]*bem.vector_normals_solution[vec_index];
+                          normy += bem.vector_normals_solution[vec_index] * bem.vector_normals_solution[vec_index];
+                        }
+                      Assert(std::fabs(normy-1.)<tol, ExcMessage("you are using wrongly the normal vector"));
+                      tmp_rhs(local_dof_indices[j]) = tmp_dphi_dn;
+                      dphi_dn(local_dof_indices[j]) = tmp_dphi_dn;
+                    }
                   }
                 else
                   {
@@ -325,7 +360,17 @@ void BoundaryConditions<dim>::prepare_bem_vectors()
 
           }
     }
-
+    std::cout<<this_mpi_process<<" "<<have_dirichlet_bc<<std::endl;
+    bool[n_mpi_processes] bool_foo_1, bool_foo_2(n_mpi_processes);
+    bool_foo_1[this_mpi_process]=have_dirichlet_bc;
+    have_dirichlet_bc=false;
+    // MPI_Allreduce(&have_dirichlet_bc, 1, MPI_C_BOOL, MPI_MIN, mpi_communicator);
+    MPI_Allgather(&bool_foo_1[0],n_mpi_processes,MPI_C_BOOL,&bool_foo_2[0],n_mpi_processes,MPI_C_BOOL,mpi_communicator);
+    for(unsigned int i = 0; i<bool_foo_2.size(); ++i)
+      if(bool_foo_2[i])
+        have_dirichlet_bc=true;
+    have_dirichlet_bc = bool_foo;
+    bem.pcout<<have_dirichlet_bc<<std::endl;
 }
 
 template <int dim>
@@ -361,8 +406,12 @@ void BoundaryConditions<dim>::compute_errors()
             exact_sol_deal[bem.original_to_sub_wise[i]] = exact_sol[bem.original_to_sub_wise[i]];
           auto exact_mean = VectorTools::compute_mean_value(*bem.mapping,bem.dh,QGauss<(dim-1)>(2*(2*bem.fe->degree+1)), exact_sol_deal, 0);
           exact_sol_deal.add(-exact_mean);
+          exact_mean = VectorTools::compute_mean_value(*bem.mapping,bem.dh,QGauss<(dim-1)>(2*(2*bem.fe->degree+1)), exact_sol_deal, 0);
+          std::cout<<exact_mean<<std::endl;
           auto my_mean = VectorTools::compute_mean_value(*bem.mapping,bem.dh,QGauss<(dim-1)>(2*(2*bem.fe->degree+1)), localized_phi, 0);
           localized_phi.add(-my_mean);
+          my_mean = VectorTools::compute_mean_value(*bem.mapping,bem.dh,QGauss<(dim-1)>(2*(2*bem.fe->degree+1)), localized_phi, 0);
+          std::cout<<my_mean<<std::endl;
           localized_phi.sadd(1.,-1.,exact_sol_deal);
           std::cout<<"Extracting the mean value from phi solution"<<std::endl;
           VectorTools::integrate_difference (*bem.mapping, bem.dh, localized_phi,
@@ -411,34 +460,58 @@ void BoundaryConditions<dim>::compute_errors()
       for (types::global_dof_index i=0; i<bem.dh.n_dofs(); ++i)
         phi_node_error(i) = phi_nodes_errs[i];
 
+
       phi_node_error*=-1.0;
+      std::cout<<phi_node_error.linfty_norm()<<" ";
       phi_node_error.add(1.,localized_phi);
+      std::cout<<phi_node_error.linfty_norm()<<std::endl;
 
       Vector<double> dphi_dn_node_error(bem.dh.n_dofs());
       std::vector<Vector<double> > dphi_dn_nodes_errs(bem.dh.n_dofs(), Vector<double> (dim));
       wind.vector_value_list(support_points,dphi_dn_nodes_errs);
-      dphi_dn_node_error = 0.;
-      for (types::global_dof_index i=0; i<bem.dh.n_dofs(); ++i)
-        {
-          // dphi_dn_node_error[i] = 0.;
-          for (unsigned int d=0; d<dim; ++d)
-            {
-              dphi_dn_node_error[bem.original_to_sub_wise[i]] += localised_normals[bem.vec_original_to_sub_wise[i+d*bem.dh.n_dofs()]] * dphi_dn_nodes_errs[bem.original_to_sub_wise[i]][d];
-
-
-            }
-        }
-      dphi_dn_node_error*=-1.0;
-      dphi_dn_node_error.add(1.,localized_dphi_dn);
-
-      // dphi_dn_node_error.print(std::cout);
       Vector<double> difference_per_cell_2(comp_dom.tria.n_active_cells());
-      VectorTools::integrate_difference (*bem.mapping, bem.dh, dphi_dn_node_error,
-                                         ZeroFunction<dim, double> (1),
-                                         difference_per_cell_2,
-                                         QGauss<(dim-1)>(2*(2*bem.fe->degree+1)),
-                                         VectorTools::L2_norm);
-      const double dphi_dn_L2_error = difference_per_cell_2.l2_norm();
+      double dphi_dn_max_error, dphi_dn_L2_error;
+      if(analytical_dphi_dn)
+      {
+        VectorTools::integrate_difference (*bem.mapping, bem.dh, dphi_dn_node_error,
+                                           potential_normal_derivative,
+                                           difference_per_cell_2,
+                                           QGauss<(dim-1)>(2*(2*bem.fe->degree+1)),
+                                           VectorTools::L2_norm);
+
+       dphi_dn_L2_error = difference_per_cell_2.l2_norm();
+       dphi_dn_max_error = difference_per_cell_2.linfty_norm();
+       std::vector<double> dphi_dn_node_errs(support_points.size());
+       potential_normal_derivative.value_list(support_points,dphi_dn_node_errs);
+       for (types::global_dof_index i=0; i<bem.dh.n_dofs(); ++i)
+         dphi_dn_node_error(i) = localized_dphi_dn[i]-dphi_dn_node_errs[i];
+
+      }
+      else
+      {
+        dphi_dn_node_error = 0.;
+        for (types::global_dof_index i=0; i<bem.dh.n_dofs(); ++i)
+          {
+            // dphi_dn_node_error[i] = 0.;
+            for (unsigned int d=0; d<dim; ++d)
+              {
+                dphi_dn_node_error[bem.original_to_sub_wise[i]] += localised_normals[bem.vec_original_to_sub_wise[i+d*bem.dh.n_dofs()]] * dphi_dn_nodes_errs[bem.original_to_sub_wise[i]][d];
+
+
+              }
+          }
+        dphi_dn_node_error*=-1.0;
+        dphi_dn_node_error.add(1.,localized_dphi_dn);
+
+        // dphi_dn_node_error.print(std::cout);
+        VectorTools::integrate_difference (*bem.mapping, bem.dh, dphi_dn_node_error,
+                                           ZeroFunction<dim, double> (1),
+                                           difference_per_cell_2,
+                                           QGauss<(dim-1)>(2*(2*bem.fe->degree+1)),
+                                           VectorTools::L2_norm);
+         dphi_dn_L2_error = difference_per_cell_2.l2_norm();
+
+      }
 
       const double grad_phi_max_error = vector_gradients_node_error.linfty_norm();
       const types::global_dof_index n_active_cells=comp_dom.tria.n_active_cells();
@@ -454,7 +527,7 @@ void BoundaryConditions<dim>::compute_errors()
 
       pcout<<"Phi Nodes error L_inf norm: "<<phi_max_error<<std::endl;
       pcout<<"Phi Cells error L_2 norm: "<<L2_error<<std::endl;
-      pcout<<"dPhidN Nodes error L_inf norm: "<<dphi_dn_node_error.linfty_norm()<<std::endl;
+      pcout<<"dPhidN Nodes error L_inf norm: "<<dphi_dn_max_error<<std::endl;
       pcout<<"dPhidN Nodes error L_2 norm: "<<dphi_dn_L2_error<<std::endl;
       pcout<<"Phi Nodes Gradient error L_inf norm: "<<grad_phi_max_error<<std::endl;
       pcout<<"Phi Cells Gradient  error L_2 norm: "<<grad_L2_error<<std::endl;
