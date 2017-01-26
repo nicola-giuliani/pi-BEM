@@ -307,7 +307,7 @@ void BoundaryConditions<dim>::prepare_bem_vectors()
                 //tmp_rhs(local_dof_indices[j]) = node_coors[j](0);
                 phi(local_dof_indices[j]) = potential.value(support_points[local_dof_indices[j]]);
                 tmp_rhs(local_dof_indices[j]) = potential.value(support_points[local_dof_indices[j]]);
-                bem.pcout<<"DIRICHLET"<<std::endl;
+                // bem.pcout<<"DIRICHLET"<<std::endl;
                 //bem.pcout<<"internalElse "<<local_dof_indices[j]<<" norm ("<<node_normals[j]<<")  "<<" pos ("<<node_coors[j]<<")    "<<node_coors[j](0)<<std::endl;
               }
             else
@@ -360,17 +360,17 @@ void BoundaryConditions<dim>::prepare_bem_vectors()
 
           }
     }
-    std::cout<<this_mpi_process<<" "<<have_dirichlet_bc<<std::endl;
-    bool[n_mpi_processes] bool_foo_1, bool_foo_2(n_mpi_processes);
-    bool_foo_1[this_mpi_process]=have_dirichlet_bc;
+    // std::cout<<this_mpi_process<<" "<<have_dirichlet_bc<<std::endl;
+    double bool_foo_1(0), bool_foo_2(0);
+    bool_foo_1=(double) have_dirichlet_bc;
     have_dirichlet_bc=false;
-    // MPI_Allreduce(&have_dirichlet_bc, 1, MPI_C_BOOL, MPI_MIN, mpi_communicator);
-    MPI_Allgather(&bool_foo_1[0],n_mpi_processes,MPI_C_BOOL,&bool_foo_2[0],n_mpi_processes,MPI_C_BOOL,mpi_communicator);
-    for(unsigned int i = 0; i<bool_foo_2.size(); ++i)
-      if(bool_foo_2[i])
-        have_dirichlet_bc=true;
-    have_dirichlet_bc = bool_foo;
-    bem.pcout<<have_dirichlet_bc<<std::endl;
+    MPI_Allreduce(&bool_foo_1, &bool_foo_2, 1, MPI_DOUBLE, MPI_SUM, mpi_communicator);
+    // MPI_Allgather(&bool_foo_1[0],n_mpi_processes,MPI_C_BOOL,&bool_foo_2[0],n_mpi_processes,MPI_C_BOOL,mpi_communicator);
+    // for(unsigned int i = 0; i<n_mpi_processes; ++i)
+    if(bool_foo_2>0)
+      have_dirichlet_bc=true;
+
+    // std::cout<<this_mpi_process<<" "<<have_dirichlet_bc<<std::endl;
 }
 
 template <int dim>
@@ -473,7 +473,7 @@ void BoundaryConditions<dim>::compute_errors()
       double dphi_dn_max_error, dphi_dn_L2_error;
       if(analytical_dphi_dn)
       {
-        VectorTools::integrate_difference (*bem.mapping, bem.dh, dphi_dn_node_error,
+        VectorTools::integrate_difference (*bem.mapping, bem.dh, localized_dphi_dn,
                                            potential_normal_derivative,
                                            difference_per_cell_2,
                                            QGauss<(dim-1)>(2*(2*bem.fe->degree+1)),
