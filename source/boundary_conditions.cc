@@ -360,7 +360,7 @@ void BoundaryConditions<dim>::prepare_bem_vectors()
 
           }
     }
-    // std::cout<<this_mpi_process<<" "<<have_dirichlet_bc<<std::endl;
+    std::cout<<this_mpi_process<<" "<<have_dirichlet_bc<<std::endl;
     double bool_foo_1(0), bool_foo_2(0);
     bool_foo_1=(double) have_dirichlet_bc;
     have_dirichlet_bc=false;
@@ -369,8 +369,8 @@ void BoundaryConditions<dim>::prepare_bem_vectors()
     // for(unsigned int i = 0; i<n_mpi_processes; ++i)
     if(bool_foo_2>0)
       have_dirichlet_bc=true;
-
-    // std::cout<<this_mpi_process<<" "<<have_dirichlet_bc<<std::endl;
+    MPI_Barrier(mpi_communicator);
+    std::cout<<this_mpi_process<<" "<<have_dirichlet_bc<<std::endl;
 }
 
 template <int dim>
@@ -458,13 +458,13 @@ void BoundaryConditions<dim>::compute_errors()
       std::vector<double> phi_nodes_errs(bem.dh.n_dofs());
       potential.value_list(support_points,phi_nodes_errs);
       for (types::global_dof_index i=0; i<bem.dh.n_dofs(); ++i)
-        phi_node_error(i) = phi_nodes_errs[i];
+        phi_node_error(i) = localized_phi[i]-phi_nodes_errs[i];
 
 
-      phi_node_error*=-1.0;
-      std::cout<<phi_node_error.linfty_norm()<<" ";
-      phi_node_error.add(1.,localized_phi);
-      std::cout<<phi_node_error.linfty_norm()<<std::endl;
+      // phi_node_error*=-1.0;
+      // std::cout<<phi_node_error.linfty_norm()<<" ";
+      // phi_node_error.add(1.,localized_phi);
+      // std::cout<<phi_node_error.linfty_norm()<<std::endl;
 
       Vector<double> dphi_dn_node_error(bem.dh.n_dofs());
       std::vector<Vector<double> > dphi_dn_nodes_errs(bem.dh.n_dofs(), Vector<double> (dim));

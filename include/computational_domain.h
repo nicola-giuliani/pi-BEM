@@ -180,7 +180,7 @@ public:
   std::set<typename Triangulation<dim-1,dim>::active_cell_iterator> edge_cells;
   Manifold<dim-1, dim> *manifold;
   ConditionalOStream pcout;
-
+  bool refine_doubling_dofs;
 
 };
 

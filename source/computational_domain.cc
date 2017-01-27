@@ -70,6 +70,9 @@ void ComputationalDomain<dim>::declare_parameters (ParameterHandler &prm)
 
   prm.declare_entry("Number of cycles", "2",
                     Patterns::Integer());
+  prm.declare_entry("Refine doubling the dofs", "false",
+                    Patterns::Bool());
+
 
   prm.enter_subsection("Boundary Conditions ID Numbers");
   {
@@ -85,6 +88,8 @@ void ComputationalDomain<dim>::declare_parameters (ParameterHandler &prm)
   prm.leave_subsection();
 
 
+
+
 }
 
 template <int dim>
@@ -95,6 +100,7 @@ void ComputationalDomain<dim>::parse_parameters (ParameterHandler &prm)
   input_grid_format = prm.get("Input grid format");
   n_cycles = prm.get_integer("Number of cycles");
 
+  refine_doubling_dofs = prm.get_bool("Refine doubling the dofs");
 
 
 
@@ -501,7 +507,27 @@ void ComputationalDomain<dim>::refine_and_resize(const unsigned int refinement_l
 {
   pcout<<"Refining and resizing mesh as required"<<std::endl;
 
-  tria.refine_global(refinement_level);
+  if(refine_doubling_dofs)
+  {
+    for(unsigned int i=0; i<refinement_level; ++i)
+    {
+      auto cell = tria.begin_active();
+      auto endc = tria.end();
+      types::global_dof_index k = 0;
+      while(k<tria.n_active_cells()/3)
+      {
+        cell->set_refine_flag();
+        ++cell;
+        k=k+1;
+      }
+      tria.prepare_coarsening_and_refinement();
+      tria.execute_coarsening_and_refinement ();
+    }
+  }
+  else
+  {
+    tria.refine_global(refinement_level);
+  }
   pcout<<"We have a tria of "<<tria.n_active_cells()<<" cells."<<std::endl;
   GridTools::partition_triangulation(n_mpi_processes, tria);
   std::string filename0 = ( "meshResult.inp" );

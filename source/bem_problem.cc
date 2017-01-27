@@ -2046,5 +2046,4 @@ void BEMProblem<dim>::adaptive_refinement(const TrilinosWrappers::MPI::Vector &e
 
 
 
-
 template class BEMProblem<3>;
