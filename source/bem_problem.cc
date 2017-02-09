@@ -1097,6 +1097,20 @@ void BEMProblem<dim>::vmult(TrilinosWrappers::MPI::Vector &dst, const TrilinosWr
 
   serv_phi.scale(neumann_nodes);
   serv_dphi_dn.scale(dirichlet_nodes);
+  // for(auto i : this_cpu_set)
+  //   {
+  //     for(auto j : this_cpu_set)
+  //       pcout<<dirichlet_matrix(i,j)<<" ";
+  //     pcout<<std::endl;
+  //   }
+  // pcout<<std::endl;
+  // for(auto i : this_cpu_set)
+  //   {
+  //     for(auto j : this_cpu_set)
+  //       pcout<<neumann_matrix(i,j)<<" ";
+  //     pcout<<std::endl;
+  //   }
+  // pcout<<std::endl;
 
   if (solution_method == "Direct")
     {

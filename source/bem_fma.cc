@@ -2546,6 +2546,11 @@ TrilinosWrappers::PreconditionILU &BEMFMA<dim>::FMA_preconditioner(const Trilino
   struct PrecScratch {};
 
   // We need to fill a vector that memorise the entries of the row associated with the index we are treating.
+  // init_prec_sparsity_pattern.compress();
+  // TrilinosWrappers::SparsityPatternIterators::Iterator p = init_prec_sparsity_pattern.begin();
+  // auto sparsy=init_prec_sparsity_pattern.begin(0);
+  // std::cout<<" boia cane "<<std::endl;
+
   struct PrecCopy
   {
     PrecCopy()
@@ -2583,13 +2588,21 @@ TrilinosWrappers::PreconditionILU &BEMFMA<dim>::FMA_preconditioner(const Trilino
         else
           {
             //cout<<i<<"  (nc): ";
+            // auto sparsy=this->init_prec_sparsity_pattern.begin(i);
+            // std::cout<<" boia cane "<<std::endl;
+
+            // for(auto sparsy=init_prec_sparsity_pattern.begin(i); sparsy!=init_prec_sparsity_pattern.end(i); ++sparsy)
+            // {
+            //   copy_data.sparsity_row.push_back(sparsy->column());
+            //   std::cout<<i<<" "<<sparsy->column()<<std::endl;
+            // }
             // other nodes entries are taken from the unconstrained preconditioner matrix
             for (unsigned int j=0; j<fma_dh->n_dofs(); ++j)
               {
                 if (this->init_prec_sparsity_pattern.exists(i,j))
                   {
                     copy_data.sparsity_row.push_back(j);
-                    // std::cout<<"boia"<<j<<" ";
+                    // std::cout<<i<<" "<<j<<std::endl;
                   }
               }
             //cout<<endl;
@@ -2654,6 +2667,7 @@ TrilinosWrappers::PreconditionILU &BEMFMA<dim>::FMA_preconditioner(const Trilino
         else
           {
             // other nodes entries are taken from the unconstrained preconditioner matrix
+            // DA RIVEDERE CON GLI ITERATOR!!!
             for (unsigned int j=0; j<foo_fma->fma_dh->n_dofs(); ++j)
               {
                 // QUI CHECK SU NEUMANN - DIRICHLET PER METTERE A POSTO, tanto lui già conosce le matrici.

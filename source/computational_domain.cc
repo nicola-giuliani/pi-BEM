@@ -193,7 +193,23 @@ void ComputationalDomain<dim>::parse_parameters (ParameterHandler &prm)
 template <int dim>
 void ComputationalDomain<dim>::read_domain()
 {
-
+  tria.clear();
+  Triangulation<dim, dim> foo_tria;
+  std::vector<unsigned int> repetitions(dim-1);
+  repetitions[0]=2;
+  repetitions[1]=2;
+  Point<dim-1> p1,p2;
+  p2[0]=10;
+  p2[1]=10;
+  GridGenerator::hyper_cube (foo_tria,0,1);
+  foo_tria.refine_global();
+  
+  std::string filename = "simple_tria.inp";
+  std::ofstream wall_ofs;
+  wall_ofs.open(filename, std::ofstream::out);
+  GridOut go;
+  go.write_ucd(tria,wall_ofs);
+  tria.clear();
   std::ifstream in;
   in.open (input_grid_name + "." + input_grid_format);
   GridIn<dim-1, dim> gi;
@@ -580,7 +596,7 @@ template<int dim>
 void ComputationalDomain<dim>::update_triangulation()
 {
   // compute_double_vertex_cache();
-  make_edges_conformal();
+  // make_edges_conformal(false);
   // tria.execute_coarsening_and_refinement ();
 
   pcout<<"We have a tria of "<<tria.n_active_cells()<<" cells."<<std::endl;
