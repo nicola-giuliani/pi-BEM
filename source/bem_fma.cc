@@ -2597,6 +2597,13 @@ TrilinosWrappers::PreconditionILU &BEMFMA<dim>::FMA_preconditioner(const Trilino
             //   std::cout<<i<<" "<<sparsy->column()<<std::endl;
             // }
             // other nodes entries are taken from the unconstrained preconditioner matrix
+            // Epetra_FECrsGraph& TrilinosWrappers::SparsityPattern::trilinos_sparsity_pattern;
+            //             int Epetra_CrsGraph::ExtractGlobalRowView	(	int 	GlobalRow,
+            // int & 	NumIndices,
+            // int *& 	Indices
+            // )		const
+            //  PROVA!!! E METTI LE ALTRE.
+
             for (unsigned int j=0; j<fma_dh->n_dofs(); ++j)
               {
                 if (this->init_prec_sparsity_pattern.exists(i,j))
