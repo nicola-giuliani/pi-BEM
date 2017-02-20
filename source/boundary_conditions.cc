@@ -472,7 +472,7 @@ void BoundaryConditions<dim>::compute_errors()
       std::vector<Vector<double> > dphi_dn_nodes_errs(bem.dh.n_dofs(), Vector<double> (dim));
       wind.vector_value_list(support_points,dphi_dn_nodes_errs);
       Vector<double> difference_per_cell_2(comp_dom.tria.n_active_cells());
-      double dphi_dn_max_error, dphi_dn_L2_error;
+      double dphi_dn_max_error,dphi_dn_max_error_2, dphi_dn_L2_error;
       pcout<<"VAFFANCULO "<<analytical_dphi_dn<<std::endl;
       if(analytical_dphi_dn)
       {
@@ -513,7 +513,8 @@ void BoundaryConditions<dim>::compute_errors()
                                            QGauss<(dim-1)>(2*(2*bem.fe->degree+1)),
                                            VectorTools::L2_norm);
          dphi_dn_L2_error = difference_per_cell_2.l2_norm();
-
+         dphi_dn_max_error = dphi_dn_node_error.linfty_norm();
+         dphi_dn_max_error_2 = difference_per_cell_2.linfty_norm();
       }
 
       const double grad_phi_max_error = vector_gradients_node_error.linfty_norm();
@@ -530,7 +531,8 @@ void BoundaryConditions<dim>::compute_errors()
 
       pcout<<"Phi Nodes error L_inf norm: "<<phi_max_error<<std::endl;
       pcout<<"Phi Cells error L_2 norm: "<<L2_error<<std::endl;
-      pcout<<"dPhidN Nodes error L_inf norm: "<<dphi_dn_max_error<<std::endl;
+      pcout<<"dPhidN Nodes error L_inf norm 1: "<<dphi_dn_max_error<<std::endl;
+      pcout<<"dPhidN Nodes error L_inf norm 2: "<<dphi_dn_max_error_2<<std::endl;
       pcout<<"dPhidN Nodes error L_2 norm: "<<dphi_dn_L2_error<<std::endl;
       pcout<<"Phi Nodes Gradient error L_inf norm: "<<grad_phi_max_error<<std::endl;
       pcout<<"Phi Cells Gradient  error L_2 norm: "<<grad_L2_error<<std::endl;
