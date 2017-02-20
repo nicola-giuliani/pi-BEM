@@ -139,6 +139,8 @@ void BoundaryConditions<dim>::parse_parameters(ParameterHandler &prm)
   }
   prm.leave_subsection();
 
+  analytical_dphi_dn=false;
+
 }
 
 
@@ -471,6 +473,7 @@ void BoundaryConditions<dim>::compute_errors()
       wind.vector_value_list(support_points,dphi_dn_nodes_errs);
       Vector<double> difference_per_cell_2(comp_dom.tria.n_active_cells());
       double dphi_dn_max_error, dphi_dn_L2_error;
+      pcout<<"VAFFANCULO "<<analytical_dphi_dn<<std::endl;
       if(analytical_dphi_dn)
       {
         VectorTools::integrate_difference (*bem.mapping, bem.dh, localized_dphi_dn,
