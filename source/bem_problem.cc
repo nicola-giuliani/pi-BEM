@@ -546,11 +546,10 @@ void BEMProblem<dim>::assemble_system()
 
 
 
-  std::vector<QTelles<dim-1> > sing_quadratures;
+  std::vector<QGaussOneOverR<dim-1> > sing_quadratures;
   for (unsigned int i=0; i<fe->dofs_per_cell; ++i)
-    sing_quadratures.push_back
-    (QTelles<dim-1>(singular_quadrature_order,
-                    fe->get_unit_support_points()[i]));
+    sing_quadratures.push_back(QGaussOneOverR<dim-1>(singular_quadrature_order,
+                    fe->get_unit_support_points()[i],false));
 
   // Usage of alternative singular quadrature formula
   // std::vector<QGaussOneOverR<dim-1> > sing_quadratures;
@@ -938,6 +937,8 @@ void BEMProblem<dim>::assemble_system()
                     {
                       const Tensor<1,dim> R = singular_q_points[q] - support_points[i];
                       LaplaceKernel::kernels(R, D, s);
+                      D*=R.norm();
+                      s*=R.norm();
 
                       for (unsigned int j=0; j<fe->dofs_per_cell; ++j)
                         {

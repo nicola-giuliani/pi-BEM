@@ -323,7 +323,7 @@ void BoundaryConditions<dim>::prepare_bem_vectors()
                         tmp_dphi_dn += imposed_pot_grad[d]*bem.vector_normals_solution[vec_index];
                         normy += bem.vector_normals_solution[vec_index] * bem.vector_normals_solution[vec_index];
                       }
-                    Assert(std::fabs(normy-1.)<tol, ExcMessage("you are using wrongly the normal vector"));
+                    // Assert(std::fabs(normy-1.)<tol, ExcMessage("you are using wrongly the normal vector"));
                     tmp_rhs(local_dof_indices[j]) = tmp_dphi_dn;
                     dphi_dn(local_dof_indices[j]) = tmp_dphi_dn;
                   }
