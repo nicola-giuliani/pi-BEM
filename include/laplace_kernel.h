@@ -69,4 +69,25 @@ namespace LaplaceKernel
       }
   }
 
+  template <int dim>
+  void kernels_r_out(const Tensor<1, dim> &R, Tensor<1,dim> &D, double &d)
+  {
+    double r = R.norm();
+    double r2 = r*r;
+    switch (dim)
+      {
+      case 2:
+        d = -std::log(r) / (2*numbers::PI);
+        D = R / ( -2*numbers::PI * r2);
+        break;
+      case 3:
+        d = (1./( 4*numbers::PI ) );
+        D = R / ( -4*numbers::PI * r2 );
+        break;
+      default:
+        Assert(false, ExcInternalError());
+      }
+  }
+
+
 }
