@@ -543,6 +543,8 @@ void BEMProblem<dim>::assemble_system()
 
 
   std::vector<Quadrature<dim-1> > sing_quadratures;
+  std::vector<QGaussOneOverR<dim-1> > sing_quadratures2;
+
   for (unsigned int i=0; i<fe->dofs_per_cell; ++i)
   {
     if(fe->degree > 1)
@@ -551,9 +553,10 @@ void BEMProblem<dim>::assemble_system()
     }
     else
     {
-      sing_quadratures.push_back
-      (QTelles<dim-1>(singular_quadrature_order,
-                      fe->get_unit_support_points()[i]));
+      sing_quadratures.push_back(QGaussOneOverR<dim-1>(singular_quadrature_order,
+                      fe->get_unit_support_points()[i],true));
+      sing_quadratures2.push_back(QGaussOneOverR<dim-1>(singular_quadrature_order,
+                      fe->get_unit_support_points()[i],false));
     }
   }
 
@@ -631,6 +634,7 @@ void BEMProblem<dim>::assemble_system()
 
   Point<dim> D;
   double s;
+
 
   for (cell = dh.begin_active(); cell != endc; ++cell)
     {
@@ -922,11 +926,16 @@ void BEMProblem<dim>::assemble_system()
                   Assert(singular_index != numbers::invalid_unsigned_int,
                          ExcInternalError());
 
-                  const Quadrature<dim-1> *
-                  singular_quadrature
-                    = dynamic_cast<Quadrature<dim-1>*>(
-                        &sing_quadratures[singular_index]);
-                  Assert(singular_quadrature, ExcInternalError());
+                   const Quadrature<dim-1> *
+                   singular_quadrature
+                     = dynamic_cast<Quadrature<dim-1>*>(
+                         &sing_quadratures[singular_index]);
+                   Assert(singular_quadrature, ExcInternalError());
+                   const Quadrature<dim-1> *
+                   singular_quadrature2
+                     = dynamic_cast<Quadrature<dim-1>*>(
+                         &sing_quadratures2[singular_index]);
+                   Assert(singular_quadrature, ExcInternalError());
 
                   FEValues<dim-1,dim> fe_v_singular (*mapping, *fe, *singular_quadrature,
                                                      update_jacobians |
@@ -936,24 +945,52 @@ void BEMProblem<dim>::assemble_system()
 
                   fe_v_singular.reinit(cell);
 
-                  const std::vector<Tensor<1, dim> > &singular_normals = fe_v_singular.get_all_normal_vectors();
-                  const std::vector<Point<dim> > &singular_q_points = fe_v_singular.get_quadrature_points();
+                  FEValues<dim-1,dim> fe_v_singular2 (*mapping, *fe, *singular_quadrature2,
+                                                     update_jacobians |
+                                                     update_values |
+                                                     update_cell_normal_vectors |
+                                                     update_quadrature_points );
 
+                  fe_v_singular2.reinit(cell);
+
+                  const std::vector<Tensor<1, dim> > &singular_normals = fe_v_singular.get_all_normal_vectors();
+                  const std::vector<Tensor<1, dim> > &singular_normals2 = fe_v_singular2.get_all_normal_vectors();
+                  const std::vector<Point<dim> > &singular_q_points = fe_v_singular.get_quadrature_points();
+                  const std::vector<Point<dim> > &singular_q_points2 = fe_v_singular2.get_quadrature_points();
+                  // std::cout<<singular_index<<" "<<support_points[local_dof_indices[singular_index]]<<" "<<support_points[i]<<std::endl;
                   for (unsigned int q=0; q<singular_quadrature->size(); ++q)
                     {
                       const Tensor<1,dim> R = singular_q_points[q] - support_points[i];
+                      const Tensor<1,dim> R2 = singular_q_points2[q] - support_points[i];
+                      Point<dim> D2;
+                      double s2;
+                      LaplaceKernel::kernels_r_out(R2, D2, s2);
                       LaplaceKernel::kernels(R, D, s);
-
+                      auto foo_1 = mapping->transform_real_to_unit_cell(cell, support_points[i]);
+                      auto foo_2 = mapping->transform_real_to_unit_cell(cell, singular_q_points2[q]);
+                      const Tensor<1,2> R3 = foo_1 - foo_2;
+                      double factor = R3.norm()/R2.norm();
+                      s2*=factor;
+                      D2*=factor;
+                      // auto jacobian=fe_v_singular.jacobian(q);
+                      // double foo = fe_v_singular2.JxW(q)/singular_quadrature2->weight(q);
+                      // std::cout<<factor<<" "<<fe_v_singular.JxW(q)/fe_v_singular2.JxW(q)<<" "<<foo<<std::endl;
+                      // D*=R.norm();
+                      // s*=R.norm();
+                      // if(R.norm()*fe_v_singular.JxW(q)==fe_v_singular.JxW(q)/fe_v_singular2.JxW(q))
+                        // std::cout<<"LOOOOOOOLLLL"<<std::endl;
+                      // std::cout<<R.norm()<<" "<<fe_v_singular.JxW(q)<<" "<<R2.norm()<<" "<<R3.norm()<<" "<<fe_v_singular.JxW(q)/fe_v_singular2.JxW(q)<<" "<<std::endl;
                       for (unsigned int j=0; j<fe->dofs_per_cell; ++j)
                         {
-                          local_neumann_matrix_row_i(j) += (( D *
-                                                              singular_normals[q])                *
-                                                            fe_v_singular.shape_value(j,q)        *
-                                                            fe_v_singular.JxW(q)       );
+                          local_neumann_matrix_row_i(j) += (( D2 *
+                                                              singular_normals2[q])                *
+                                                            fe_v_singular2.shape_value(j,q)        *
+                                                            fe_v_singular2.JxW(q)       );
 
-                          local_dirichlet_matrix_row_i(j) += ( s   *
-                                                               fe_v_singular.shape_value(j,q)     *
-                                                               fe_v_singular.JxW(q) );
+                          local_dirichlet_matrix_row_i(j) += ( s2   *
+                                                               fe_v_singular2.shape_value(j,q)     *
+                                                               fe_v_singular2.JxW(q) );
+
                         }
                     }
                 }
