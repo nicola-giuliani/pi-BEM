@@ -203,12 +203,12 @@ void ComputationalDomain<dim>::read_domain()
   p2[1]=10;
   GridGenerator::hyper_cube (foo_tria,0,1);
   foo_tria.refine_global();
-  
+
   std::string filename = "simple_tria.inp";
   std::ofstream wall_ofs;
   wall_ofs.open(filename, std::ofstream::out);
   GridOut go;
-  go.write_ucd(tria,wall_ofs);
+  go.write_ucd(foo_tria,wall_ofs);
   tria.clear();
   std::ifstream in;
   in.open (input_grid_name + "." + input_grid_format);

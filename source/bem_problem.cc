@@ -543,7 +543,7 @@ void BEMProblem<dim>::assemble_system()
 
 
   std::vector<Quadrature<dim-1> > sing_quadratures;
-  std::vector<QGaussOneOverR<dim-1> > sing_quadratures2;
+  std::vector<Quadrature<dim-1> > sing_quadratures2;
 
   for (unsigned int i=0; i<fe->dofs_per_cell; ++i)
   {
@@ -973,7 +973,7 @@ void BEMProblem<dim>::assemble_system()
                       s2*=factor;
                       D2*=factor;
                       // auto jacobian=fe_v_singular.jacobian(q);
-                      // double foo = fe_v_singular2.JxW(q)/singular_quadrature2->weight(q);
+                      double foo = fe_v_singular2.JxW(q)/singular_quadrature2->weight(q);
                       // std::cout<<factor<<" "<<fe_v_singular.JxW(q)/fe_v_singular2.JxW(q)<<" "<<foo<<std::endl;
                       // D*=R.norm();
                       // s*=R.norm();
