@@ -547,7 +547,7 @@ void BEMProblem<dim>::assemble_system()
 
   for (unsigned int i=0; i<fe->dofs_per_cell; ++i)
   {
-    if(fe->degree > 1)
+    if(fe->degree > 10)
     {
       sing_quadratures.push_back(QIterated<dim-1>(QGauss<1> (singular_quadrature_order),fe->degree));
     }
