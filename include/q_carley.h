@@ -19,7 +19,7 @@ public:
    * A Gauss Legendre quadrature of order n
    * will be used as base quadrature.
    */
-  QCarley (const unsigned int n, const unsigned int m, const Point<dim> &singularity);
+  QCarley (const unsigned int n, const unsigned int m, const Point<dim> singularity);
 
 private:
 
