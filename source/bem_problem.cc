@@ -2,6 +2,7 @@
 
 #include "../include/bem_problem.h"
 #include "../include/laplace_kernel.h"
+#include "../include/q_carley.h"
 #include <deal.II/numerics/error_estimator.h>
 
 
@@ -572,24 +573,29 @@ void BEMProblem<dim>::assemble_system()
   neumann_matrix = 0;
   dirichlet_matrix = 0;
 
-
+  Point<1> foo;
+  foo[0] = 0.34;
+  QCarley<1> pippo(4*(2), 4, foo);
+  std::cout<<"bubu"<<std::endl;
   std::vector<Quadrature<dim-1> > sing_quadratures;
   for (unsigned int i=0; i<fe->dofs_per_cell; ++i)
     {
-      if (fe->degree > 1)
-        {
-          sing_quadratures.push_back(QIterated<dim-1>(QGauss<1> (singular_quadrature_order),fe->degree));
-        }
-      else
-        {
-          sing_quadratures.push_back
-          (QTelles<dim-1>(singular_quadrature_order,
-                          fe->get_unit_support_points()[i]));
+      sing_quadratures.push_back(QCarley<dim-1> (4*(fe->degree+1), fe->degree+1, fe->get_unit_support_points()[i]));
+
+      // if (fe->degree > 1)
+      //   {
+      //     sing_quadratures.push_back(QIterated<dim-1>(QGauss<1> (singular_quadrature_order),fe->degree));
+      //   }
+      // else
+      //   {
+      //     sing_quadratures.push_back
+      //     (QTelles<dim-1>(singular_quadrature_order,
+      //                     fe->get_unit_support_points()[i]));
           //
           // Usage of alternative singular quadrature formula
           // (QGaussOneOverR<dim-1>(singular_quadrature_order,
           //                 fe->get_unit_support_points()[i],true));
-        }
+        // }
     }
 
 
