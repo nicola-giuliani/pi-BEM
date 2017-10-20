@@ -48,5 +48,18 @@ private:
 
 };
 
+template <int dim>
+class QTellesGen: public Quadrature<dim>
+{
+public:
+
+  QTellesGen(const Quadrature<1> &base_quad, const Point<dim> &singularity, const unsigned int order=3);
+
+  QTellesGen(const unsigned int n, const Point<dim> &singularity, const unsigned int order=3);
+
+private:
+
+};
+
 DEAL_II_NAMESPACE_CLOSE
 #endif

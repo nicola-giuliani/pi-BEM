@@ -1,5 +1,13 @@
 #include "../include/q_carley.h"
 #include <math.h>
+#include <Eigen/Dense>
+#include <Eigen/SVD>
+#include <Eigen/LU>
+// #include <Eigen/src/SVD/BDCSVD.h>
+// #include <Accelerate/Accelerate.h>
+
+using namespace Eigen;
+
 DEAL_II_NAMESPACE_OPEN
 
 
@@ -85,7 +93,9 @@ double QCarley<dim>::compute_log_integral(const unsigned int legendre_order)
     {
       auto Qn_p1 = boost::math::legendre_q(legendre_order+1,x[0]);
       auto Qn_m1 = boost::math::legendre_q(legendre_order-1,x[0]);
-      result = 2. * (Qn_p1 - Qn_m1) / (2. * legendre_order);
+      result = 2. * (Qn_p1 - Qn_m1) / (2. * legendre_order+1.);
+      // std::cout<<"HERE I AM "<<Qn_p1<<" "<<Qn_m1<<std::endl;
+
     }
     else
     {
@@ -118,11 +128,13 @@ double QCarley<dim>::compute_log_integral(const unsigned int legendre_order)
           helper_1 += (std::pow(-1., k)* boost::math::factorial<double>(4*m - 2*k + 2.))/
                        (boost::math::factorial<double>(k) * boost::math::factorial<double>(2*m - k + 1.) * boost::math::factorial<double>(2*m - 2*k + 2.)) *
                       (helper_2);
+
         }
         result = helper_1 * 1. / std::pow(4., m) * sgn(x[0]);
       }
     }
   }
+  // std::cout<<"LOOK AT ME!!! "<<result<<" "<<legendre_order<<std::endl;
   return result;
 }
 
@@ -179,7 +191,7 @@ double QCarley<dim>::compute_1_r2_integral(const unsigned int legendre_order)
     result = Pn_x * 2. / (x[0] * x[0] - 1.);
     result += -Pnprime_x * std::log(std::fabs((x[0] + 1.) / (1. - x[0])));
   }
-  std::cout<<"r2 "<<result<<" "<<helper<<" "<<Pnprime_x<<" "<<x[0]<<std::endl;
+  // std::cout<<"r2 "<<result<<" "<<helper<<" "<<Pnprime_x<<" "<<x[0]<<std::endl;
   return result + helper;
 }
 
@@ -199,33 +211,63 @@ void QCarley<dim>::compute_weights()
 template <>
 void QCarley<1>::assemble_matrix_rhs(FullMatrix<double> &matrix_final, Vector<double> &rhs_final)
 {
-  FullMatrix<double> matrix_ls(4*M,N);
-  Vector<double> rhs_ls(4*M);
+  MatrixXf matrix_ls(4*M,N);
+  VectorXf rhs_ls(4*M);
 
   for(unsigned int i=0; i<M; ++i)
   {
-    rhs_ls[i]=compute_alone_integral(i);
-    rhs_ls[M+i]=compute_log_integral(i);
-    rhs_ls[2*M+i]=compute_1_r_integral(i);
-    rhs_ls[3*M+i]=compute_1_r2_integral(i);
+    rhs_ls(i)     = compute_alone_integral(i);
+    rhs_ls(M+i)   = compute_log_integral(i);
+    rhs_ls(2*M+i) = compute_1_r_integral(i);
+    rhs_ls(3*M+i) = compute_1_r2_integral(i);
     for(unsigned int j=0; j<N; ++j)
     {
       auto t = quadrature_points[j];
       auto Pit = boost::math::legendre_p(i,t[0]);
-      std::cout<<i<<" "<<t[0]<<" "<<Pit<<std::endl;
-      matrix_ls.set(i    , j, Pit);
-      matrix_ls.set(i+M  , j, Pit * std::log(std::fabs(x[0] - t[0])));
-      matrix_ls.set(i+2*M, j, Pit / (x[0] - t[0]));
-      matrix_ls.set(i+3*M, j, Pit / (x[0] - t[0]) / (x[0] - t[0]));
+      // std::cout<<i<<" "<<t[0]<<" "<<Pit<<std::endl;
+      matrix_ls(i    , j) = Pit;
+      matrix_ls(i+M  , j) = Pit * std::log(std::fabs(x[0] - t[0]));
+      matrix_ls(i+2*M, j) = Pit / (x[0] - t[0]);
+      matrix_ls(i+3*M, j) = Pit / (x[0] - t[0]) / (x[0] - t[0]);
+      // matrix_ls.set(i    , j, Pit);
+      // matrix_ls.set(i+M  , j, Pit * std::log(std::fabs(x[0] - t[0])));
+      // matrix_ls.set(i+2*M, j, Pit / (x[0] - t[0]));
+      // matrix_ls.set(i+3*M, j, Pit / (x[0] - t[0]) / (x[0] - t[0]));
     }
   }
-  matrix_ls.Tmmult(matrix_final, matrix_ls);
-  matrix_ls.print_formatted(std::cout);
-  std::cout<<std::endl;
-  rhs_ls.print(std::cout);
-  std::cout<<std::endl;
-
-  matrix_ls.Tvmult(rhs_final,rhs_ls);
+  // matrix_ls.Tmmult(matrix_final, matrix_ls);
+  // matrix_ls.print_formatted(std::cout);
+  // std::cout<<std::endl;
+  // rhs_ls.print(std::cout);
+  // std::cout<<std::endl;
+  //
+  // matrix_ls.Tvmult(rhs_final,rhs_ls);
+  VectorXf solution(N);
+  // VectorXf checkk(N);
+  // VectorXf checkkk(N);
+  // std::cout << matrix_ls << std::endl;
+  // std::cout << rhs_ls << std::endl;
+  // checkkk(0)=-2.41455756;
+  // checkkk(1)=3.42263836;
+  // checkkk(2)=-0.36642816;
+  // checkkk(3)=-0.2180764;
+  // checkkk(4)=2.85357908;
+  // checkkk(5)=-1.73885892;
+  // checkkk(6)=-0.74846057;
+  // checkkk(7)=1.21016417;
+  // solution = matrix_ls.bdcSvd().solve(rhs_ls);
+  // solution = (matrix_ls.transpose() * matrix_ls).ldlt().solve(matrix_ls.transpose() * rhs_ls);
+  solution = matrix_ls.fullPivHouseholderQr().solve(rhs_ls);
+  // checkk = matrix_ls*solution - rhs_ls;
+  // solution = matrix_ls.jacobiSvd(ComputeThinU | ComputeThinV).solve(rhs_ls);
+  // std::cout << solution << std::endl;
+  // std::cout <<"try1"<<std::endl;
+  // std::cout << checkk << std::endl;
+  // std::cout <<"try2"<<std::endl;
+  // std::cout << matrix_ls*checkkk - rhs_ls << std::endl;
+  // std::cout << "rhs (3) "<<std::endl<<rhs_ls <<std::endl;
+  for(unsigned int i = 0; i<rhs_final.size(); ++i)
+    rhs_final[i] = solution(i);
 
 }
 
@@ -236,14 +278,14 @@ void QCarley<1>::compute_weights()
   FullMatrix<double> matrix_ls_final(N,N);
   Vector<double> rhs_ls_final(N);
   assemble_matrix_rhs(matrix_ls_final, rhs_ls_final);
-  matrix_ls_final.print_formatted(std::cout);
-  std::cout<<std::endl;
-  rhs_ls_final.print(std::cout);
-  matrix_ls_final.gauss_jordan();
-  Vector<double> w(weights.size());
-  matrix_ls_final.vmult(w, rhs_ls_final);
+  // matrix_ls_final.print_formatted(std::cout);
+  // std::cout<<std::endl;
+  // rhs_ls_final.print(std::cout);
+  // matrix_ls_final.gauss_jordan();
+  // Vector<double> w(weights.size());
+  // matrix_ls_final.vmult(w, rhs_ls_final);
   for(unsigned int i=0; i<weights.size(); ++i)
-    weights[i] = w[i];
+    weights[i] = rhs_ls_final[i];
 
 }
 
@@ -276,9 +318,113 @@ QCarley<1>::QCarley (
   }
 }
 
+template <int dim>
+QTellesGen<dim>::QTellesGen (
+  const unsigned int n, const Point<dim> &singularity, const unsigned int order)
+  :
+/**
+* In this case we map the standard Gauss Legendre formula using the given
+* singularity point coordinates.
+**/
+  Quadrature<dim>(QTellesGen<dim>(QGauss<1>(n), singularity, order))
+{}
+
+template <>
+QTellesGen<1>::QTellesGen (
+  const Quadrature<1> &base_quad, const Point<1> &singularity, const unsigned int order)
+  :
+/**
+* We explicitly implement the Telles' variable change if dim == 1.
+**/
+  Quadrature<1>(base_quad)
+{
+  AssertThrow(order > 0, ExcMessage("The order of the variable change must be positive"));
+  AssertThrow(order%2 == 1, ExcMessage("The order of the variable change must be odd"));
+  double q = order;
+  // The original algorithm is designed for a quadrature interval [-1,1].
+  for(unsigned int i = 0; i<quadrature_points.size(); ++i)
+  {
+    quadrature_points[i][0] = (quadrature_points[i][0]-0.5) * 2.;
+    weights[i] *= 2.;
+  }
+  std::vector<Point<1> > quadrature_points_dummy(quadrature_points.size());
+  std::vector<double> weights_dummy(weights.size());
+  double s0 = (singularity[0] - 0.5) * 2.;
+  unsigned int cont = 0;
+  const double tol = 1e-10;
+  for (unsigned int d = 0; d < quadrature_points.size(); ++d)
+    {
+      if (std::abs(quadrature_points[d][0] - singularity[0]) > tol)
+        {
+          quadrature_points_dummy[d-cont] = quadrature_points[d];
+          weights_dummy[d-cont] = weights[d];
+        }
+      else
+        {
+          // We need to remove the singularity point from the quadrature point
+          // list. To do so we use the variable cont.
+          cont = 1;
+        }
+
+    }
+  if (cont == 1)
+    {
+      quadrature_points.resize(quadrature_points_dummy.size()-1);
+      weights.resize(weights_dummy.size()-1);
+      for (unsigned int d = 0; d < quadrature_points.size()-1; ++d)
+        {
+          quadrature_points[d] = quadrature_points_dummy[d];
+          weights[d] = weights_dummy[d];
+        }
+    }
+  // We need to check if the singularity is at the boundary of the interval.
+  double delta = std::pow(2.,-q) * std::pow(std::pow((1+s0),1./q)+std::pow((1-s0),1./q),q);
+  double t0 = (std::pow((1+s0),1./q)+std::pow((1+s0),1./q))/(std::pow((1+s0),1./q)+std::pow((1-s0),1./q));
+  double t, J;
+  for (unsigned int d = 0; d < quadrature_points.size(); ++d)
+  {
+    t = quadrature_points[d][0];
+    quadrature_points[d][0] = s0 + delta * std::pow((t-t0), q);
+    J = delta * q * std::pow((t-t0), -1.+q);
+    weights[d] *= J;
+  }
+  for (unsigned int d = 0; d < quadrature_points.size(); ++d)
+  {
+      quadrature_points[d][0] = quadrature_points[d][0]*0.5+0.5;
+      weights[d] *= .5;
+  }
+
+}
+
+template <int dim>
+QTellesGen<dim>::QTellesGen (
+  const Quadrature<1> &base_quad, const Point<dim> &singularity, const unsigned int order)
+  :
+/**
+* We need the explicit implementation if dim == 1. If dim > 1 we use the
+* former implementation and apply a tensorial product to obtain the higher
+* dimensions.
+**/
+  Quadrature<dim>(
+    dim == 2 ?
+    QAnisotropic<dim>(
+      QTellesGen<1>(base_quad, Point<1>(singularity[0]), order),
+      QTellesGen<1>(base_quad, Point<1>(singularity[1]), order)) :
+    dim == 3 ?
+    QAnisotropic<dim>(
+      QTellesGen<1>(base_quad, Point<1>(singularity[0]), order),
+      QTellesGen<1>(base_quad, Point<1>(singularity[1]), order),
+      QTellesGen<1>(base_quad, Point<1>(singularity[2]), order)) :
+    Quadrature<dim>())
+{}
+
+
 
 template class QCarley<1> ;
 template class QCarley<2> ;
 template class QCarley<3> ;
 
+template class QTellesGen<1> ;
+template class QTellesGen<2> ;
+template class QTellesGen<3> ;
 DEAL_II_NAMESPACE_CLOSE

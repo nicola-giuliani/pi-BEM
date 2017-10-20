@@ -566,10 +566,11 @@ void BEMProblem<dim>::assemble_system()
   neumann_matrix = 0;
   dirichlet_matrix = 0;
 
-  Point<1> foo;
-  foo[0] = 0.34;
-  QCarley<1> pippo(4*(2), 4, foo);
-  std::cout<<"bubu"<<std::endl;
+  // Point<1> foo;
+  // foo[0] = 0.34;
+  // QCarley<1> pippo(8, 2, foo);
+  // std::cout<<"bubu"<<std::endl;
+  // AssertThrow(false, ExcMessage("FANCULO"));
   std::vector<Quadrature<dim-1> > sing_quadratures;
   for (unsigned int i=0; i<fe->dofs_per_cell; ++i)
     {
