@@ -347,16 +347,22 @@ QTellesGen<1>::QTellesGen (
     quadrature_points[i][0] = (quadrature_points[i][0]-0.5) * 2.;
     weights[i] *= 2.;
   }
-  std::vector<Point<1> > quadrature_points_dummy(quadrature_points.size());
+  std::vector<Point<1, long double> > quadrature_points_dummy(quadrature_points.size());
+  std::vector<Point<1, long double> > quadrature_points_dummy_2(quadrature_points.size());
   std::vector<double> weights_dummy(weights.size());
   double s0 = (singularity[0] - 0.5) * 2.;
+  // std::cout<<singularity[0] << " "<<s0<<std::endl;
   unsigned int cont = 0;
+  // std::cout<<"orginal 1"<<std::endl;
+  // for (unsigned int d = 0; d < size(); ++d)
+  //   std::cout<<quadrature_points[d][0]<<" "<<weights[d]<<std::endl;
   const double tol = 1e-10;
   for (unsigned int d = 0; d < quadrature_points.size(); ++d)
     {
-      if (std::abs(quadrature_points[d][0] - singularity[0]) > tol)
+      if (std::abs(quadrature_points[d][0] - s0) > tol)
         {
-          quadrature_points_dummy[d-cont] = quadrature_points[d];
+          quadrature_points_dummy[d-cont][0] = quadrature_points[d][0];
+          quadrature_points_dummy_2[d-cont][0] = quadrature_points[d][0];
           weights_dummy[d-cont] = weights[d];
         }
       else
@@ -367,30 +373,46 @@ QTellesGen<1>::QTellesGen (
         }
 
     }
+
   if (cont == 1)
     {
       quadrature_points.resize(quadrature_points_dummy.size()-1);
+      quadrature_points_dummy_2.resize(quadrature_points_dummy.size()-1);
       weights.resize(weights_dummy.size()-1);
-      for (unsigned int d = 0; d < quadrature_points.size()-1; ++d)
+      for (unsigned int d = 0; d < quadrature_points.size(); ++d)
         {
-          quadrature_points[d] = quadrature_points_dummy[d];
+          // std::cout<<quadrature_points_dummy[d][0]<<" ";
+          quadrature_points_dummy_2[d] = quadrature_points_dummy[d];
           weights[d] = weights_dummy[d];
+          // std::cout<<quadrature_points[d][0]<<std::endl;
         }
     }
+  // std::cout<<"CONT "<<cont<<std::endl;
   // We need to check if the singularity is at the boundary of the interval.
   double delta = std::pow(2.,-q) * std::pow(std::pow((1+s0),1./q)+std::pow((1-s0),1./q),q);
-  double t0 = (std::pow((1+s0),1./q)+std::pow((1+s0),1./q))/(std::pow((1+s0),1./q)+std::pow((1-s0),1./q));
+  double t0 = (std::pow((1.+s0),1./q)-std::pow((1.-s0),1./q))/(std::pow((1.+s0),1./q)+std::pow((1.-s0),1./q));
+  // std::cout<<s0<<" "<<t0<<std::endl;
+  // std::cout<<std::pow((1.+s0),1./q)<<" "<<std::pow((1.-s0),1./q)<<" "<<(std::pow((1.+s0),1./q)-std::pow((1.-s0),1./q))<<" "<<(std::pow((1.+s0),1./q)+std::pow((1.-s0),1./q))<<std::endl;
   double t, J;
+  // std::cout<<"orginal 2"<<std::endl;
+  // for (unsigned int d = 0; d < size(); ++d)
+  //   std::cout<<quadrature_points[d][0]<<" "<<weights[d]<<std::endl;
   for (unsigned int d = 0; d < quadrature_points.size(); ++d)
   {
-    t = quadrature_points[d][0];
-    quadrature_points[d][0] = s0 + delta * std::pow((t-t0), q);
+    t = quadrature_points_dummy_2[d][0];
+    // std::cout<<d<<" ";
+    quadrature_points_dummy_2[d][0] = s0 + delta * std::pow((t-t0), q);
+    std::cout<<t<<" "<<t0<<" "<<delta<<" "<<std::pow((t-t0), q)<<" "<<delta * std::pow((t-t0), q)<<std::endl;
     J = delta * q * std::pow((t-t0), -1.+q);
     weights[d] *= J;
   }
-  for (unsigned int d = 0; d < quadrature_points.size(); ++d)
+  // std::cout<<std::endl;
+  // for (unsigned int d = 0; d < size(); ++d)
+  //   std::cout<<quadrature_points[d][0]<<" "<<weights[d]<<std::endl;
+
+  for (unsigned int d = 0; d < size(); ++d)
   {
-      quadrature_points[d][0] = quadrature_points[d][0]*0.5+0.5;
+      quadrature_points[d][0] = quadrature_points_dummy_2[d][0]*0.5+0.5;
       weights[d] *= .5;
   }
 

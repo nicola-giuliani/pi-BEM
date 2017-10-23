@@ -579,10 +579,25 @@ void BEMProblem<dim>::assemble_system()
   // std::cout<<"bubu"<<std::endl;
   // AssertThrow(false, ExcMessage("FANCULO"));
   std::vector<Quadrature<dim-1> > sing_quadratures;
+  Point<1> p1,p2,p3;
+  p1[0]=0.;
+  p2[0]=1.;
+  p3[0]=0.5;
+  unsigned int telles_order =11;
+  QTellesGen<1> foot1(11, p1, telles_order);
+  for(unsigned int j = 0; j<foot1.size(); ++j)
+    std::cout<<"foot1, index : "<<j<<" , point :"<<foot1.point(j)<<" , weight : "<<foot1.weight(j)<<std::endl;
+  QTellesGen<1> foot2(11, p2, telles_order);
+  for(unsigned int j = 0; j<foot2.size(); ++j)
+    std::cout<<"foot2, index : "<<j<<" , point :"<<foot2.point(j)<<" , weight : "<<foot2.weight(j)<<std::endl;
+  QTellesGen<1> foot3(11, p3, telles_order);
+  for(unsigned int j = 0; j<foot3.size(); ++j)
+    std::cout<<"foot3, index : "<<j<<" , point :"<<foot3.point(j)<<" , weight : "<<foot3.weight(j)<<std::endl;
+
   for (unsigned int i=0; i<fe->dofs_per_cell; ++i)
     {
-      sing_quadratures.push_back(QCarley<dim-1> (4*(fe->degree+1), fe->degree+1, fe->get_unit_support_points()[i]));
-
+      sing_quadratures.push_back(QTellesGen<dim-1> (singular_quadrature_order, fe->get_unit_support_points()[i], telles_order));
+      // sing_quadratures.push_back(QTelles<dim-1> (singular_quadrature_order, fe->get_unit_support_points()[i]));
       // if (fe->degree > 1)
       //   {
       //     sing_quadratures.push_back(QIterated<dim-1>(QGauss<1> (singular_quadrature_order),fe->degree));
