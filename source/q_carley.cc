@@ -1,4 +1,5 @@
 #include "../include/q_carley.h"
+#include <deal.II/base/geometry_info.h>
 #include <math.h>
 #include <Eigen/Dense>
 #include <Eigen/SVD>
@@ -350,7 +351,7 @@ QTellesGen<1>::QTellesGen (
   std::vector<Point<1, long double> > quadrature_points_dummy(quadrature_points.size());
   std::vector<Point<1, long double> > quadrature_points_dummy_2(quadrature_points.size());
   std::vector<double> weights_dummy(weights.size());
-  double s0 = (singularity[0] - 0.5) * 2.;
+  long double s0 = (singularity[0] - 0.5) * 2.;
   // std::cout<<singularity[0] << " "<<s0<<std::endl;
   unsigned int cont = 0;
   // std::cout<<"orginal 1"<<std::endl;
@@ -389,7 +390,7 @@ QTellesGen<1>::QTellesGen (
     }
   // std::cout<<"CONT "<<cont<<std::endl;
   // We need to check if the singularity is at the boundary of the interval.
-  double delta = std::pow(2.,-q) * std::pow(std::pow((1+s0),1./q)+std::pow((1-s0),1./q),q);
+  long double delta = std::pow(2.,-q) * std::pow(std::pow((1+s0),1./q)+std::pow((1-s0),1./q),q);
   double t0 = (std::pow((1.+s0),1./q)-std::pow((1.-s0),1./q))/(std::pow((1.+s0),1./q)+std::pow((1.-s0),1./q));
   // std::cout<<s0<<" "<<t0<<std::endl;
   // std::cout<<std::pow((1.+s0),1./q)<<" "<<std::pow((1.-s0),1./q)<<" "<<(std::pow((1.+s0),1./q)-std::pow((1.-s0),1./q))<<" "<<(std::pow((1.+s0),1./q)+std::pow((1.-s0),1./q))<<std::endl;
@@ -397,12 +398,14 @@ QTellesGen<1>::QTellesGen (
   // std::cout<<"orginal 2"<<std::endl;
   // for (unsigned int d = 0; d < size(); ++d)
   //   std::cout<<quadrature_points[d][0]<<" "<<weights[d]<<std::endl;
+  long double half = 0.5;
   for (unsigned int d = 0; d < quadrature_points.size(); ++d)
   {
     t = quadrature_points_dummy_2[d][0];
     // std::cout<<d<<" ";
-    quadrature_points_dummy_2[d][0] = s0 + delta * std::pow((t-t0), q);
-    std::cout<<t<<" "<<t0<<" "<<delta<<" "<<std::pow((t-t0), q)<<" "<<delta * std::pow((t-t0), q)<<std::endl;
+    quadrature_points_dummy_2[d][0] = delta * std::pow((t-t0), q) + s0;
+    std::cout.precision(20);
+    // std::cout<<t<<" "<<t0<<" "<<delta<<" "<<std::pow((t-t0), q)<<" "<<delta * std::pow((t-t0), q)<<" "<<quadrature_points_dummy_2[d][0]<<" "<<quadrature_points_dummy_2[d][0]*half+half<<std::endl;
     J = delta * q * std::pow((t-t0), -1.+q);
     weights[d] *= J;
   }
@@ -412,10 +415,96 @@ QTellesGen<1>::QTellesGen (
 
   for (unsigned int d = 0; d < size(); ++d)
   {
-      quadrature_points[d][0] = quadrature_points_dummy_2[d][0]*0.5+0.5;
+      quadrature_points[d][0] = static_cast<double> (quadrature_points_dummy_2[d][0]*half+half);
       weights[d] *= .5;
   }
 
+}
+
+template<>
+unsigned int QTellesOnBoundary<2>::quad_size(const Point<2> singularity,
+                                          const unsigned int n)
+{
+  double eps=1e-8;
+  bool on_edge=false;
+  bool on_vertex=false;
+  for (unsigned int i=0; i<2; ++i)
+    if ( ( std::abs(singularity[i]  ) < eps ) ||
+         ( std::abs(singularity[i]-1) < eps ) )
+      on_edge = true;
+  if (on_edge && (std::abs( (singularity-Point<2>(.5, .5)).norm_square()-.5)
+                  < eps) )
+    on_vertex = true;
+  if (on_vertex) return (n*n);
+  if (on_edge) return (2*n*n);
+  return (4*n*n);
+}
+
+template<>
+QTellesOnBoundary<1>::QTellesOnBoundary(const unsigned int n,
+                                  const Point<1> &singularity,
+                                  const unsigned int order) :
+  Quadrature<1>(n)
+{
+  QTellesGen<1> telly(n, singularity, order);
+  quadrature_points.resize(telly.size());
+  weights.resize(telly.size());
+  for(unsigned int i = 0; i<telly.size(); ++i)
+  {
+    quadrature_points[i] = telly.point(i);
+    weights[i] = telly.weight(i);
+  }
+}
+template<>
+QTellesOnBoundary<2>::QTellesOnBoundary(const unsigned int n,
+                                  const Point<2> &singularity,
+                                  const unsigned int order) :
+  Quadrature<2>(quad_size(singularity, n))
+{
+  // We treat all the cases in the
+  // same way. Split the element in 4
+  // pieces, measure the area, if
+  // it's relevant, add the
+  // quadrature connected to that
+  // singularity.
+  std::vector<QTellesGen<2> > quads;
+  std::vector<Point<2> > origins;
+  // Id of the corner with a
+  // singularity
+  Point<2> p3(1.,1.),p1(1.,0.),p2(0.,1.),p0(0.,0.);
+
+
+  quads.push_back(QTellesGen<2> (n, p3, order));
+  quads.push_back(QTellesGen<2> (n, p2, order));
+  quads.push_back(QTellesGen<2> (n, p1, order));
+  quads.push_back(QTellesGen<2> (n, p0, order));
+
+  origins.push_back(Point<2>(0.,0.));
+  origins.push_back(Point<2>(singularity[0],0.));
+  origins.push_back(Point<2>(0.,singularity[1]));
+  origins.push_back(singularity);
+
+  // Lexicographical ordering.
+
+  double eps = 1e-8;
+  unsigned int q_id = 0; // Current quad point index.
+  Tensor<1,2> dist;
+
+  for (unsigned int box=0; box<4; ++box)
+    {
+      dist = (singularity-GeometryInfo<2>::unit_cell_vertex(box));
+      dist = Point<2>(std::abs(dist[0]), std::abs(dist[1]));
+      double area = dist[0]*dist[1];
+      if (area > eps)
+        for (unsigned int q=0; q<quads[box].size(); ++q, ++q_id)
+          {
+            const Point<2> &qp = quads[box].point(q);
+            this->quadrature_points[q_id] =
+              origins[box]+
+              Point<2>(dist[0]*qp[0], dist[1]*qp[1]);
+            this->weights[q_id] = quads[box].weight(q)*area;
+          }
+    }
 }
 
 template <int dim>
@@ -449,4 +538,7 @@ template class QCarley<3> ;
 template class QTellesGen<1> ;
 template class QTellesGen<2> ;
 template class QTellesGen<3> ;
+
+template class QTellesOnBoundary<1> ;
+template class QTellesOnBoundary<2> ;
 DEAL_II_NAMESPACE_CLOSE

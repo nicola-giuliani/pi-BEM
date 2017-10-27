@@ -57,8 +57,23 @@ public:
 
   QTellesGen(const unsigned int n, const Point<dim> &singularity, const unsigned int order=3);
 
+// protected:
+//   std::vector<Point<dim, long double> > quadrature_points;
+
+};
+
+template <int dim>
+class QTellesOnBoundary: public Quadrature<dim>
+{
+public:
+
+  // QTellesOnBoundary(const Quadrature<1> &base_quad, const Point<dim> &singularity, const unsigned int order=3);
+
+  QTellesOnBoundary(const unsigned int n, const Point<dim> &singularity, const unsigned int order=3);
+
 private:
 
+  unsigned int quad_size(const Point<2> singularity, const unsigned int n);
 };
 
 DEAL_II_NAMESPACE_CLOSE
