@@ -205,7 +205,7 @@ void BoundaryConditions<dim>::solve_problem()
 
 
   bem.solve(phi, dphi_dn, tmp_rhs);
-  have_dirichlet_bc=bem.have_dirichlet_bc;
+  have_dirichlet_bc=true;//bem.have_dirichlet_bc;
   if (!have_dirichlet_bc)
     {
       std::vector<Point<dim> > support_points(n_dofs);

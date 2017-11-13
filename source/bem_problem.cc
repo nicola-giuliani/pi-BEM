@@ -1130,10 +1130,10 @@ template <int dim>
 void BEMProblem<dim>::vmult(TrilinosWrappers::MPI::Vector &dst, const TrilinosWrappers::MPI::Vector &src) const
 {
   serv_phi = src;
-  if (!have_dirichlet_bc)
-    {
-      vector_shift(serv_phi, -serv_phi.l2_norm());
-    }
+  // if (!have_dirichlet_bc)
+  //   {
+  //     vector_shift(serv_phi, -serv_phi.l2_norm());
+  //   }
   serv_dphi_dn = src;
 
 
@@ -1176,8 +1176,8 @@ void BEMProblem<dim>::vmult(TrilinosWrappers::MPI::Vector &dst, const TrilinosWr
   //std::cout<<"*** "<<serv_phi(0)<<" or "<<serv_dphi_dn(0)<<"   src: "<<src(0)<<"  dst: "<<dst(0)<<std::endl;
   // in fully neumann bc case, we have to rescale the vector to have a zero mean
   // one
-  if (!have_dirichlet_bc)
-    vector_shift(dst, -dst.l2_norm());
+  // if (!have_dirichlet_bc)
+  //   vector_shift(dst, -dst.l2_norm());
 }
 
 
@@ -1265,6 +1265,7 @@ void BEMProblem<dim>::solve_system(TrilinosWrappers::MPI::Vector &phi, TrilinosW
 
 
   cc.distribute_rhs(system_rhs);
+  pcout<<system_rhs[0]<<std::endl;
   system_rhs.compress(VectorOperation::insert);
   // vmult(sol,system_rhs);
   // Assert(sol.vector_partitioner().SameAs(system_rhs.vector_partitioner()),ExcMessage("Schizofrenia???"));
@@ -1291,6 +1292,7 @@ void BEMProblem<dim>::solve_system(TrilinosWrappers::MPI::Vector &phi, TrilinosW
       solver.solve (cc, sol, system_rhs, fma_preconditioner);
       // solver.solve (cc, sol, system_rhs, PreconditionIdentity());
     }
+  pcout<<sol[0]<<std::endl;
 
   // cc.apply_constraint(sol);
   //pcout<<"sol = [";
@@ -1340,6 +1342,8 @@ void BEMProblem<dim>::solve_system(TrilinosWrappers::MPI::Vector &phi, TrilinosW
   phi.compress(VectorOperation::insert);
   dphi_dn.compress(VectorOperation::insert);
 
+  pcout<<phi[0]<<std::endl;
+  // phi[0]=500.;
   //if (!have_dirichlet_bc)
   //   vector_shift(phi,-phi.l2_norm());
 
@@ -1421,7 +1425,8 @@ void BEMProblem<dim>::compute_constraints(IndexSet &c_cpu_set, ConstraintMatrix 
   DoFTools::get_subdomain_association   (dh,dofs_domain_association);
   // here we prepare the constraint matrix so as to account for the presence of double and
   // triple dofs
-
+  c.add_line(0);
+  c.set_inhomogeneity(0,-10.);
   // we start looping on the dofs
   for (types::global_dof_index i=0; i <tmp_rhs.size(); i++)
     {

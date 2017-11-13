@@ -63,6 +63,7 @@ FIND_PACKAGE(deal2lkit 1.0 REQUIRED
   )
 D2K_INITIALIZE_CACHED_VARIABLES()
 
+
 # We one library and one target for each type of deal.II library
 # we found. If you compiled deal.II with both Release and Debug
 # mode, this will generate both Release and Debug programs for you
@@ -119,6 +120,11 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tests AND BEM_ENABLE_TESTING)
   ENABLE_TESTING()
 endif()
 
+SET( EIGEN_INCLUDE_DIR "$ENV{EIGEN_INCLUDE_DIR}" )
+IF( NOT EIGEN_INCLUDE_DIR )
+    MESSAGE( FATAL_ERROR "Please point the environment variable EIGEN3_INCLUDE_DIR to the include directory of your Eigen installation.")
+ENDIF()
+INCLUDE_DIRECTORIES ( "${EIGEN_INCLUDE_DIR}" )
 
 # Doxygen
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in)
