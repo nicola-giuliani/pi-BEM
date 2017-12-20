@@ -685,7 +685,7 @@ void ComputationalDomain<dim>::refine_and_resize(const unsigned int refinement_l
         }
       // the number of cells refined in this cycle is reported before
       // proceeding with the next one
-      pcout<<"Aspect Ratio Reduction Cycle: "<<cycles_counter<<" ("<<refinedCellCounter<<")"<<endl;
+      pcout<<"Aspect Ratio Reduction Cycle: "<<cycles_counter<<" ("<<refinedCellCounter<<")"<<std::endl;
       tria.execute_coarsening_and_refinement();
 
       // the following commented lines are here for debug puroposes: if
