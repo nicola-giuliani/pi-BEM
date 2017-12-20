@@ -564,6 +564,10 @@ void BEMProblem<dim>::compute_reordering_vectors()
     }
 
 }
+
+template <>
+void BEMProblem<2>::assemble_system()
+{}
 template <int dim>
 void BEMProblem<dim>::assemble_system()
 {
@@ -584,7 +588,6 @@ void BEMProblem<dim>::assemble_system()
   // p2[0]=1.;
   // p3[0]=0.5;
   // std::cout<<"LIMITE LIMITOSO DOUBLE : "<<std::numeric_limits<double>::min()<<std::endl;
-  unsigned int telles_order = 3;
   // QTellesGen<1> foot1(11, p1, telles_order);
   // for(unsigned int j = 0; j<foot1.size(); ++j)
   //   std::cout<<"foot1, index : "<<j<<" , point :"<<foot1.point(j)<<" , weight : "<<foot1.weight(j)<<std::endl;
@@ -594,11 +597,11 @@ void BEMProblem<dim>::assemble_system()
   // QTellesGen<1> foot3(11, p3, telles_order);
   // for(unsigned int j = 0; j<foot3.size(); ++j)
   //   std::cout<<"foot3, index : "<<j<<" , point :"<<foot3.point(j)<<" , weight : "<<foot3.weight(j)<<std::endl;
-
   for (unsigned int i=0; i<fe->dofs_per_cell; ++i)
     {
-      // sing_quadratures.push_back(QTellesGen<dim-1> (singular_quadrature_order, fe->get_unit_support_points()[i], telles_order));
-      sing_quadratures.push_back(QTellesOnBoundary<dim-1> (singular_quadrature_order, fe->get_unit_support_points()[i], telles_order));
+      sing_quadratures.push_back(MyQGaussOneOverR<dim-1>(singular_quadrature_order,fe->get_unit_support_points()[i],true));
+        // sing_quadratures.push_back(QTellesGen<1> (singular_quadrature_order, fe->get_unit_support_points()[i], telles_order));
+      // sing_quadratures.push_back(QTellesOnBoundary<dim-1> (singular_quadrature_order, fe->get_unit_support_points()[i], telles_order));
       // sing_quadratures.push_back(QTelles<dim-1> (singular_quadrature_order, fe->get_unit_support_points()[i]));
       // if (fe->degree > 1)
       //   {

@@ -11287,5 +11287,3 @@ double AssLegFunction::P_20_20_Deriv (const double x) const
   t6 = t5 * t5;
   return (-0.15e2 / 0.131072e6 * t1 * t6 * t3 * x);
 }
-
-
