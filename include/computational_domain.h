@@ -251,15 +251,15 @@ public:
   ConditionalOStream pcout;
 
 
-  /// vectors containing the CAD surfaces and curves to be
-  /// (optionally) used for refinement of the triangulation
-  std::vector<TopoDS_Shape> cad_surfaces;
-  std::vector<TopoDS_Shape> cad_curves;
-
-  /// vectors containing the CAD surfaces and curves projectors
-  /// to be (optionally) used for refinement of the triangulation
-  std::vector<std::shared_ptr<OpenCASCADE::NormalToMeshProjectionBoundary<2,3> > > normal_to_mesh_projectors;
-  std::vector<std::shared_ptr<OpenCASCADE::ArclengthProjectionLineManifold<2,3> > >line_projectors;
+  // /// vectors containing the CAD surfaces and curves to be
+  // /// (optionally) used for refinement of the triangulation
+  // std::vector<TopoDS_Shape> cad_surfaces;
+  // std::vector<TopoDS_Shape> cad_curves;
+  //
+  // /// vectors containing the CAD surfaces and curves projectors
+  // /// to be (optionally) used for refinement of the triangulation
+  // std::vector<std::shared_ptr<OpenCASCADE::NormalToMeshProjectionBoundary<2,3> > > normal_to_mesh_projectors;
+  // std::vector<std::shared_ptr<OpenCASCADE::ArclengthProjectionLineManifold<2,3> > >line_projectors;
 
 };
 
