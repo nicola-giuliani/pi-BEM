@@ -53,10 +53,9 @@
 // specifying <code>-DDEAL_II_WITH_OPENCASCADE=ON</code> and
 // <code>-DOPENCASCADE_DIR=/path/to/your/opencascade/installation</code>
 // when calling <code>cmake</code> during deal.II configuration.
-#include <deal.II/opencascade/boundary_lib.h>
-#include <deal.II/opencascade/utilities.h>
-
-#include <TopoDS_Shape.hxx>
+// #include <deal.II/opencascade/boundary_lib.h>
+// #include <deal.II/opencascade/utilities.h>
+// #include <TopoDS_Shape.hxx>
 
 #include <cmath>
 #include <iostream>
