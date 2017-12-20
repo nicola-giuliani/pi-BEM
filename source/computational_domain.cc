@@ -50,15 +50,15 @@ template <int dim>
 ComputationalDomain<dim>::~ComputationalDomain()
 {
 
-  for (unsigned int i=0; i<cad_surfaces.size(); ++i)
-    {
-      tria.set_manifold(1+i);
-    }
-
-  for (unsigned int i=0; i<cad_curves.size(); ++i)
-    {
-      tria.set_manifold(11+i);
-    }
+  // for (unsigned int i=0; i<cad_surfaces.size(); ++i)
+  //   {
+  //     tria.set_manifold(1+i);
+  //   }
+  //
+  // for (unsigned int i=0; i<cad_curves.size(); ++i)
+  //   {
+  //     tria.set_manifold(11+i);
+  //   }
 
   tria.set_manifold(0);
 
