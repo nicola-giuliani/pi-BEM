@@ -1,4 +1,4 @@
-#include "../include/q_carley.h"
+#include "../include/new_quad.h"
 #include <deal.II/base/geometry_info.h>
 #include <math.h>
 // #include <Eigen/Dense>
@@ -318,6 +318,188 @@ int sgn(double val) {
 //     quadrature_points[i][0] = 0.5 * (base_quad.point(i)[0] + 1.);
 //   }
 // }
+
+
+template<int dim>
+QSimplex<dim>::QSimplex(const Quadrature<dim> &quad)
+{
+  std::vector<Point<dim> > qpoints;
+  std::vector<double > weights;
+
+  for (unsigned int i=0; i<quad.size(); ++i)
+    {
+      double r=0;
+      for (unsigned int d=0; d<dim; ++d)
+        r += quad.point(i)[d];
+      if (r <= 1)
+        {
+          this->quadrature_points.push_back(quad.point(i));
+          this->weights.push_back(quad.weight(i));
+        }
+    }
+}
+
+
+
+template<int dim>
+Quadrature<dim>
+QSimplex<dim>::compute_affine_transformation(const std::array<Point<dim>, dim+1>& vertices) const
+{
+  unsigned int i=0;
+  Tensor<2,dim> B;
+  for (unsigned int d=0; d<dim; ++d)
+    B[d] = vertices[d+1]-vertices[0];
+
+  B = transpose(B);
+  auto J = std::abs(determinant(B));
+
+  // if the determinant is zero, we return an empty quadrature
+  if (J < 1e-12)
+    return Quadrature<dim>();
+
+  std::vector<Point<dim> > qp(this->size());
+  std::vector<double> w(this->size());
+
+  for (unsigned int i=0; i<this->size(); ++i)
+    {
+      qp[i] = Point<dim>(vertices[0]+B*this->point(i));
+      w[i] = J*this->weight(i);
+    }
+
+  return Quadrature<dim>(qp, w);
+}
+
+
+
+QTrianglePolar::QTrianglePolar(const Quadrature<1> &radial_quadrature,
+                               const Quadrature<1> &angular_quadrature) :
+  QSimplex<2>(Quadrature<2>())
+{
+  QAnisotropic<2> base(radial_quadrature, angular_quadrature);
+  this->quadrature_points.resize(base.size());
+  this->weights.resize(base.size());
+  for (unsigned int i=0; i<base.size(); ++i)
+    {
+      const auto &q = base.point(i);
+      const auto &w = base.weight(i);
+
+      const auto &xhat = q[0];
+      const auto &yhat = q[1];
+
+      const double t = numbers::PI_2*yhat;
+      const double &pi = numbers::PI;
+      const double st = std::sin(t);
+      const double ct = std::cos(t);
+      const double r = xhat/(st+ct);
+
+      const double J = pi*xhat/(2*(std::sin(pi*yhat) + 1));
+
+      this->quadrature_points[i] = Point<2>(r*ct, r*st);
+      this->weights[i] = w*J;
+    }
+}
+
+
+QDuffy::QDuffy(const unsigned int &n, const unsigned int &beta) :
+  QSimplex<2>(Quadrature<2>())
+{
+  QGauss<2> q_helper(n);
+
+  this->quadrature_points.resize(q_helper.size());
+  this->weights.resize(q_helper.size());
+
+  for(unsigned int i = 0; i<q_helper.size(); ++i)
+  {
+    auto u = q_helper.point(i)[0];
+    auto v = q_helper.point(i)[1];
+    auto w = q_helper.weight(i);
+
+    auto Zx = std::pow(u, beta) * (1-v);
+    auto Zy = std::pow(u, beta) * v;
+    auto Zw = w * beta * std::pow(u, 2.*beta-1.);
+
+    this->quadrature_points[i][0] = Zx;
+    this->quadrature_points[i][1] = Zy;
+    this->weights[i] = Zw;
+  }
+
+}
+
+
+
+QTrianglePolar::QTrianglePolar(const unsigned int &n)
+  :QTrianglePolar(QGauss<1>(n),QGauss<1>(n))
+{}
+
+
+
+QLachatWatson::QLachatWatson(const Quadrature<1> &radial_quadrature,
+                             const Quadrature<1> &angular_quadrature) :
+  QSimplex<2>(Quadrature<2>())
+{
+  QAnisotropic<2> base(radial_quadrature, angular_quadrature);
+  this->quadrature_points.resize(base.size());
+  this->weights.resize(base.size());
+  for (unsigned int i=0; i<base.size(); ++i)
+    {
+      const auto &q = base.point(i);
+      const auto &w = base.weight(i);
+
+      const auto &xhat = q[0];
+      const auto &yhat = q[1];
+
+      const double x = xhat*(1-yhat);
+      const double y = xhat*yhat;
+
+      const double J = xhat;
+
+      this->quadrature_points[i] = Point<2>(x,y);
+      this->weights[i] = w*J;
+    }
+}
+
+
+
+QLachatWatson::QLachatWatson(const unsigned int &n)
+  :QLachatWatson(QGauss<1>(n),QGauss<1>(n))
+{}
+
+
+
+template<int dim>
+QSplit<dim>::QSplit(const QSimplex<dim> &base,
+                    const Point<dim> &split_point)
+{
+  std::array<Point<dim>, dim+1> vertices;
+  vertices[0] = split_point;
+
+  // Make a simplex from the split_point and the first dim vertices of each
+  // face. In dimension three, we need to split the face in two triangles, so
+  // we use once the first dim vertices of each face, and the second time the
+  // the dim vertices of each face starting from 1.
+  for (unsigned int f=0; f< GeometryInfo<dim>::faces_per_cell; ++f)
+    for (unsigned int start=0; start < (dim >2 ? 2 : 1); ++start)
+      {
+        for (unsigned int i=0; i<dim; ++i)
+          vertices[i+1] =
+            GeometryInfo<dim>::unit_cell_vertex(
+              GeometryInfo<dim>::face_to_cell_vertices(f, i+start)
+            );
+        auto quad = base.compute_affine_transformation(vertices);
+        if (quad.size())
+          {
+            this->quadrature_points.insert(
+              this->quadrature_points.end(),
+              quad.get_points().begin(),
+              quad.get_points().end());
+            this->weights.insert(
+              this->weights.end(),
+              quad.get_weights().begin(),
+              quad.get_weights().end());
+          }
+      }
+}
+
 
 template <int dim>
 QTellesGen<dim>::QTellesGen (
@@ -698,5 +880,13 @@ template class QTellesGen<3> ;
 
 template class QTellesOnBoundary<1>;
 template class QTellesOnBoundary<2>;
+
+template class QSimplex<1>;
+template class QSimplex<2>;
+template class QSimplex<3>;
+
+template class QSplit<1>;
+template class QSplit<2>;
+template class QSplit<3>;
 
 DEAL_II_NAMESPACE_CLOSE

@@ -2,7 +2,7 @@
 
 #include "../include/bem_problem.h"
 #include "../include/laplace_kernel.h"
-#include "../include/q_carley.h"
+#include "../include/new_quad.h"
 #include <deal.II/numerics/error_estimator.h>
 
 
@@ -599,7 +599,8 @@ void BEMProblem<dim>::assemble_system()
   //   std::cout<<"foot3, index : "<<j<<" , point :"<<foot3.point(j)<<" , weight : "<<foot3.weight(j)<<std::endl;
   for (unsigned int i=0; i<fe->dofs_per_cell; ++i)
     {
-      sing_quadratures.push_back(MyQGaussOneOverR<dim-1>(singular_quadrature_order,fe->get_unit_support_points()[i],true));
+      // QSplit<2> quad2(QDuffy(m+1), split_point);
+      sing_quadratures.push_back(QSplit<dim-1> (QDuffy (singular_quadrature_order),fe->get_unit_support_points()[i]));
         // sing_quadratures.push_back(QTellesGen<1> (singular_quadrature_order, fe->get_unit_support_points()[i], telles_order));
       // sing_quadratures.push_back(QTellesOnBoundary<dim-1> (singular_quadrature_order, fe->get_unit_support_points()[i], telles_order));
       // sing_quadratures.push_back(QTelles<dim-1> (singular_quadrature_order, fe->get_unit_support_points()[i]));
