@@ -84,6 +84,8 @@ public:
                 const Mapping<dim-1,dim> &input_mapping = StaticMappingQ1<dim-1, dim>::mapping,
                 unsigned int quad_order=4, unsigned int sing_quad_order=5);
 
+  void clear_fma();
+
   /// Parameters declaration: we take the number of octree level and
   /// the level of approximation of the Kernels
   virtual void declare_parameters(ParameterHandler &prm);

@@ -75,6 +75,8 @@ BEMProblem<3>::BEMProblem(ComputationalDomain<3> &comp_dom,
   comp_dom(comp_dom),
   parsed_fe("Scalar FE", "FE_Q(1)"),
   parsed_gradient_fe("Vector FE", "FESystem[FE_Q(1)^3]","u,u,u",3),
+  fe(NULL),
+  gradient_fe(NULL),
   dh(comp_dom.tria),
   gradient_dh(comp_dom.tria),
   mpi_communicator (comm),
@@ -93,6 +95,8 @@ BEMProblem<2>::BEMProblem(ComputationalDomain<2> &comp_dom,
   comp_dom(comp_dom),
   parsed_fe("Scalar FE", "FE_Q(1)"),
   parsed_gradient_fe("Vector FE", "FESystem[FE_Q(1)^2]","u,u",2),
+  fe(NULL),
+  gradient_fe(NULL),
   dh(comp_dom.tria),
   gradient_dh(comp_dom.tria),
   mpi_communicator (comm),
@@ -109,24 +113,40 @@ void BEMProblem<dim>::reinit()
 {
   // ENTRY
   Teuchos::TimeMonitor LocalTimer(*ReinitTime);
-
+  fma.clear_fma();
   fe = parsed_fe();
   gradient_fe = parsed_gradient_fe();
+
+  // if(fe == NULL)
+  // {
+  //   fe = parsed_fe();
+  //   gradient_fe = parsed_gradient_fe();
+  // }
+  // else
+  // {
+  //   dh.clear();
+  //   gradient_dh.clear();
+  //   dh.initialize(comp_dom.tria, *fe);
+  //   gradient_dh.initialize(comp_dom.tria, *gradient_fe);
+  // }
   // fe = new FE_DGQArbitraryNodes<dim-1, dim>(QGauss<1> (2));
   // gradient_fe = new FESystem<dim-1,dim>(FE_DGQArbitraryNodes<dim-1,dim>(QGauss<1> (2)),dim);
   // // auto hhh = new FE_DGQArbitraryNodes<dim-1, dim>(QGauss<1> (2));
   std::string foo = fe->get_name();
-  std::cout<<foo<<std::endl;
+  std::cout<<foo<<" "<<fe->n_subscriptions()<<" "<<gradient_fe->n_subscriptions()<<" "<<dh.n_subscriptions()<<" "<<gradient_dh.n_subscriptions()<<std::endl;
+  dh.distribute_dofs(*fe);
+  gradient_dh.distribute_dofs(*gradient_fe);
+
   // FiniteElement<dim-1,dim> * pippo = FETools::get_fe_by_name<dim-1, dim>(foo);
   // std::cout<<pippo->get_name()<<std::endl;
 
-  pcout<<dh.n_subscriptions()<<" "<<fe->n_subscriptions()<<std::endl;
-  pcout<<gradient_dh.n_subscriptions()<<" "<<gradient_fe->n_subscriptions()<<std::endl;
-  // std::ofstream logfile("output");
-  // deallog.attach(logfile);
-  dh.list_subscribers();
-  dh.distribute_dofs(*fe);
-  gradient_dh.distribute_dofs(*gradient_fe);
+  // pcout<<dh.n_subscriptions()<<" "<<fe->n_subscriptions()<<std::endl;
+  // pcout<<gradient_dh.n_subscriptions()<<" "<<gradient_fe->n_subscriptions()<<std::endl;
+  // // std::ofstream logfile("output");
+  // // deallog.attach(logfile);
+  // dh.list_subscribers();
+  // dh.distribute_dofs(*fe);
+  // gradient_dh.distribute_dofs(*gradient_fe);
 
   // we should choose the appropriate renumbering strategy and then stick with it.
   // in step 32 they use component_wise which is very straight-forward but maybe the quickest
@@ -289,10 +309,9 @@ void BEMProblem<dim>::reinit()
   neumann_nodes.reinit(this_cpu_set,mpi_communicator);
   compute_dirichlet_and_neumann_dofs_vectors();
   compute_double_nodes_set();
-
+  // pcout<<"IO "<<dh.n_subscriptions()<<" ";
   // fma.init_fma(dh, double_nodes_set, dirichlet_nodes, *mapping, quadrature_order, singular_quadrature_order);
-
-
+  // pcout<<dh.n_subscriptions()<<std::endl;
 
   // We need a TrilinosWrappers::MPI::Vector to reinit the SparsityPattern for
   // the parallel mass matrices.
@@ -2103,6 +2122,7 @@ void BEMProblem<dim>::adaptive_refinement(const TrilinosWrappers::MPI::Vector &e
   //                                                  refinement_threshold, coarsening_threshold);
   comp_dom.tria.prepare_coarsening_and_refinement();
   comp_dom.tria.execute_coarsening_and_refinement ();
+  pcout<<"bubu"<<std::endl;
 
 
 }

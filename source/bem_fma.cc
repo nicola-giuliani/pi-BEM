@@ -74,6 +74,13 @@ void BEMFMA<dim>::init_fma(const DoFHandler<dim-1,dim> &input_dh,
 }
 
 template <int dim>
+void BEMFMA<dim>::clear_fma()
+{
+  fma_dh.clear();
+  // fma_fe.clear();
+}
+
+template <int dim>
 void BEMFMA<dim>::declare_parameters (ParameterHandler &prm)
 {
   prm.enter_subsection("Octree Params");
