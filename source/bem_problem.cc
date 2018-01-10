@@ -119,6 +119,11 @@ void BEMProblem<dim>::reinit()
   // FiniteElement<dim-1,dim> * pippo = FETools::get_fe_by_name<dim-1, dim>(foo);
   // std::cout<<pippo->get_name()<<std::endl;
 
+  pcout<<dh.n_subscriptions()<<" "<<fe->n_subscriptions()<<std::endl;
+  pcout<<gradient_dh.n_subscriptions()<<" "<<gradient_fe->n_subscriptions()<<std::endl;
+  // std::ofstream logfile("output");
+  // deallog.attach(logfile);
+  dh.list_subscribers();
   dh.distribute_dofs(*fe);
   gradient_dh.distribute_dofs(*gradient_fe);
 
@@ -154,6 +159,7 @@ void BEMProblem<dim>::reinit()
         mapping = SP(new MappingQ<dim-1, dim> (mapping_degree));
     }
 
+  pcout<<gradient_dh.n_subscriptions()<<" "<<gradient_fe->n_subscriptions()<<std::endl;
 
 
   const types::global_dof_index n_dofs =  dh.n_dofs();
@@ -283,7 +289,7 @@ void BEMProblem<dim>::reinit()
   compute_dirichlet_and_neumann_dofs_vectors();
   compute_double_nodes_set();
 
-  fma.init_fma(dh, double_nodes_set, dirichlet_nodes, *mapping, quadrature_order, singular_quadrature_order);
+  // fma.init_fma(dh, double_nodes_set, dirichlet_nodes, *mapping, quadrature_order, singular_quadrature_order);
 
 
 
@@ -311,6 +317,7 @@ void BEMProblem<dim>::reinit()
   vector_sparsity_pattern.reinit(vector_this_cpu_set, vector_this_cpu_set, mpi_communicator);
   DoFTools::make_sparsity_pattern (gradient_dh, vector_sparsity_pattern, vector_constraints, true, this_mpi_process);
   vector_sparsity_pattern.compress();
+  pcout<<gradient_dh.n_subscriptions()<<" "<<gradient_fe->n_subscriptions()<<std::endl;
 
 
 
