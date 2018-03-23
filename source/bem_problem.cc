@@ -1007,9 +1007,10 @@ void BEMProblem<dim>::assemble_system()
   it_2 = this_cpu_set.end();
   sub_range.push_back(std::pair<IndexSet::ElementIterator, IndexSet::ElementIterator>(it_1, it_2));
   Threads::ThreadGroup<> threads;
+  pcout<<"Using "<<n_virtual_cores<<" different threads on processor 0"<<std::endl;
   for (unsigned int t=0; t<n_virtual_cores; ++t)
     {
-      pcout<<"NEW THREAD"<<std::endl;
+      // pcout<<"NEW THREAD"<<std::endl;
       threads += Threads::new_thread(&BEMProblem<dim>::assemble_system_on_thread_range, *this, sub_range[t].first, sub_range[t].second);
     }
   threads.join_all();
