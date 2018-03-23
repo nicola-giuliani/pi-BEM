@@ -161,6 +161,7 @@ public:
   /// right hand side.
   void assemble_system();
 
+  void assemble_system_on_thread_range(IndexSet::ElementIterator it_1, IndexSet::ElementIterator it_2);//, const BEMProblem* bemp);
 
   /// The next three methods are
   /// needed by the GMRES solver:
