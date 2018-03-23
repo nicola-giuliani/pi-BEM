@@ -616,7 +616,7 @@ void BEMProblem<dim>::assemble_system_on_thread_range(IndexSet::ElementIterator 
   const unsigned int n_q_points = fe_v.n_quadrature_points;
 
   std::vector<types::global_dof_index> local_dof_indices(fe->dofs_per_cell);
-  pcout<<fe->dofs_per_cell<<" "<<std::endl;
+  // pcout<<fe->dofs_per_cell<<" "<<std::endl;
   // // Unlike in finite element
   // // methods, if we use a collocation
   // // boundary element method, then in
