@@ -987,8 +987,6 @@ void BEMProblem<dim>::assemble_system()
 
 
   unsigned int n_virtual_cores = MultithreadInfo::n_threads();
-  std::vector<std::pair<typename DoFHandler<dim-1, dim>::active_cell_iterator, typename DoFHandler<dim-1, dim>::active_cell_iterator > > sub_rangee=Threads::split_range(dh.begin_active(), dh.end_active(comp_dom.tria.n_levels()), n_virtual_cores);
-
   // auto sub_range=Threads::split_range(this_cpu_set.begin(), this_cpu_set.end(), n_virtual_cores);
   // std::pair<IndexSet::ElementIterator, IndexSet::ElementIterator> pairy(this_cpu_set.begin(), this_cpu_set.end());
 
