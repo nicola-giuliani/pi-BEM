@@ -595,7 +595,7 @@ void BEMProblem<dim>::compute_reordering_vectors()
 
 }
 template <int dim>
-void BEMProblem<dim>::assemble_system_on_thread_range(IndexSet::ElementIterator it_1, IndexSet::ElementIterator it_2)
+void BEMProblem<dim>::assemble_system_on_thread_range(IndexSet::ElementIterator it1, IndexSet::ElementIterator it2)
 {
   // We initialize an FEValues
   // object with the quadrature
@@ -656,7 +656,7 @@ void BEMProblem<dim>::assemble_system_on_thread_range(IndexSet::ElementIterator 
       const std::vector<Point<dim> > &q_points = fe_v.get_quadrature_points();
       const std::vector<Tensor<1, dim> > &normals = fe_v.get_normal_vectors();
 
-      for (auto my_it = it_1; my_it!=it_2; ++my_it)
+      for (auto my_it = it1; my_it!=it2; ++my_it)
         {
           auto i = *my_it;
           local_neumann_matrix_row_i = 0;
@@ -1006,15 +1006,23 @@ void BEMProblem<dim>::assemble_system()
     }
   it_2 = this_cpu_set.end();
   sub_range.push_back(std::pair<IndexSet::ElementIterator, IndexSet::ElementIterator>(it_1, it_2));
-  Threads::ThreadGroup<> threads;
   pcout<<"Using "<<n_virtual_cores<<" different threads on processor 0"<<std::endl;
-  for (unsigned int t=0; t<n_virtual_cores; ++t)
-    {
-      // pcout<<"NEW THREAD"<<std::endl;
-      threads += Threads::new_thread(&BEMProblem<dim>::assemble_system_on_thread_range, *this, sub_range[t].first, sub_range[t].second);
-    }
-  threads.join_all();
+  auto f_dummy_assembler = [this, sub_range](tbb::blocked_range<unsigned int> r)
+  {
+    for(auto i = r.begin(); i!=r.end(); ++i)
+      assemble_system_on_thread_range(sub_range[i].first, sub_range[i].second);
+  };
 
+  parallel_for(tbb::blocked_range<unsigned int> (0, n_virtual_cores, 1), f_dummy_assembler);
+
+  // Threads::ThreadGroup<> threads;
+  // for (unsigned int t=0; t<n_virtual_cores; ++t)
+  //   {
+  //     // pcout<<"NEW THREAD"<<std::endl;
+  //     threads += Threads::new_thread(&BEMProblem<dim>::assemble_system_on_thread_range, *this, sub_range[t].first, sub_range[t].second);
+  //   }
+  // threads.join_all();
+  //
   pcout<<"done assembling system matrices"<<std::endl;
   // std::cout<<"printing Neumann Matrix"<<std::endl;
   // for(unsigned int i=0; i<dh.n_dofs(); ++i)

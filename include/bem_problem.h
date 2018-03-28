@@ -90,6 +90,7 @@
 #include <deal2lkit/parsed_grid_refinement.h>
 #include <deal2lkit/utilities.h>
 
+#include "tbb/parallel_for.h"
 
 
 #include <mpi.h>
