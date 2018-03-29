@@ -992,7 +992,7 @@ void BEMProblem<dim>::assemble_system()
 
 
 
-  unsigned int n_virtual_cores = 8*MultithreadInfo::n_threads();
+  unsigned int n_virtual_cores = 1*MultithreadInfo::n_threads();
   // auto sub_range=Threads::split_range(this_cpu_set.begin(), this_cpu_set.end(), n_virtual_cores);
   // std::pair<IndexSet::ElementIterator, IndexSet::ElementIterator> pairy(this_cpu_set.begin(), this_cpu_set.end());
 
