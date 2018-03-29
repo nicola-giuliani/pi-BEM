@@ -594,9 +594,15 @@ void BEMProblem<dim>::compute_reordering_vectors()
     }
 
 }
+
 template <int dim>
 void BEMProblem<dim>::assemble_system_on_thread_range(IndexSet::ElementIterator it1, IndexSet::ElementIterator it2)
 {
+  if(it2==this_cpu_set.end())
+    pcout<< "Assembling between "<<*it1<<"and end."<<std::endl;
+  else
+    pcout<< "Assembling between "<<*it1<<"and"<<*it2<<std::endl;
+
   // We initialize an FEValues
   // object with the quadrature
   // formula for the integration of
@@ -986,7 +992,7 @@ void BEMProblem<dim>::assemble_system()
 
 
 
-  unsigned int n_virtual_cores = MultithreadInfo::n_threads();
+  unsigned int n_virtual_cores = 4*MultithreadInfo::n_threads();
   // auto sub_range=Threads::split_range(this_cpu_set.begin(), this_cpu_set.end(), n_virtual_cores);
   // std::pair<IndexSet::ElementIterator, IndexSet::ElementIterator> pairy(this_cpu_set.begin(), this_cpu_set.end());
 
@@ -999,30 +1005,36 @@ void BEMProblem<dim>::assemble_system()
     ++it_2;
   for (unsigned int t=0; t<n_virtual_cores-1; ++t)
     {
+      // pcout<<*it_1<<" "<<*it_2<<std::endl;
       sub_range.push_back(std::pair<IndexSet::ElementIterator, IndexSet::ElementIterator>(it_1, it_2));
       it_1 = it_2;
       for (unsigned int i = 0; i < element_per_threads; i++)
         ++it_2;
     }
   it_2 = this_cpu_set.end();
+  // pcout<<*it_1<<" "<<*it_2<<std::endl;
   sub_range.push_back(std::pair<IndexSet::ElementIterator, IndexSet::ElementIterator>(it_1, it_2));
-  pcout<<"Using "<<n_virtual_cores<<" different threads on processor 0"<<std::endl;
+  // for (unsigned int t=0; t<sub_range.size(); ++t)
+  //   pcout<<t<<" "<<*sub_range[t].first<<" "<<*sub_range[t].second<<std::endl;
+  pcout<<"Using "<<n_virtual_cores<<" different virtual cores and "<<MultithreadInfo::n_threads()<<" different threads on processor 0"<<std::endl;
   auto f_dummy_assembler = [this, sub_range](tbb::blocked_range<unsigned int> r)
   {
+    // pcout<<"Hello i am thread "<< Threads::this_thread_id()<<std::endl;
     for(auto i = r.begin(); i!=r.end(); ++i)
       assemble_system_on_thread_range(sub_range[i].first, sub_range[i].second);
   };
 
-  parallel_for(tbb::blocked_range<unsigned int> (0, n_virtual_cores, 1), f_dummy_assembler);
+  parallel_for(tbb::blocked_range<unsigned int> (0, n_virtual_cores), f_dummy_assembler);
 
   // Threads::ThreadGroup<> threads;
   // for (unsigned int t=0; t<n_virtual_cores; ++t)
   //   {
   //     // pcout<<"NEW THREAD"<<std::endl;
+  //
   //     threads += Threads::new_thread(&BEMProblem<dim>::assemble_system_on_thread_range, *this, sub_range[t].first, sub_range[t].second);
   //   }
   // threads.join_all();
-  //
+
   pcout<<"done assembling system matrices"<<std::endl;
   // std::cout<<"printing Neumann Matrix"<<std::endl;
   // for(unsigned int i=0; i<dh.n_dofs(); ++i)
