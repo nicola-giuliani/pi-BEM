@@ -388,6 +388,8 @@ void BEMProblem<dim>::declare_parameters (ParameterHandler &prm)
 
   prm.declare_entry("Mapping Q Degree","1",Patterns::Integer());
 
+  prm.declare_entry("Virtual cores multiplicity","1",Patterns::Integer());
+
   prm.declare_entry("Continuos gradient across edges","true",Patterns::Bool());
 
 }
@@ -418,7 +420,9 @@ void BEMProblem<dim>::parse_parameters (ParameterHandler &prm)
 
   mapping_type = prm.get("Mapping Type");
   mapping_degree = prm.get_integer("Mapping Q Degree");
+  virtual_cores_multiplicity = prm.get_integer("Virtual cores multiplicity");
   continuos_gradient = prm.get_bool("Continuos gradient across edges");
+
 
 
 }
@@ -992,7 +996,7 @@ void BEMProblem<dim>::assemble_system()
 
 
 
-  unsigned int n_virtual_cores = 1*MultithreadInfo::n_threads();
+  unsigned int n_virtual_cores = virtual_cores_multiplicity*MultithreadInfo::n_threads();
   // auto sub_range=Threads::split_range(this_cpu_set.begin(), this_cpu_set.end(), n_virtual_cores);
   // std::pair<IndexSet::ElementIterator, IndexSet::ElementIterator> pairy(this_cpu_set.begin(), this_cpu_set.end());
 

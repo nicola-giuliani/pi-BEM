@@ -264,6 +264,7 @@ public:
   Vector<double> map_vector;
   shared_ptr<Mapping<dim-1, dim> >     mapping;
   unsigned int mapping_degree;
+  unsigned int virtual_cores_multiplicity;
   Vector<double> map_points;
 
 
