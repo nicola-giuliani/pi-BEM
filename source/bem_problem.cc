@@ -150,6 +150,8 @@ void BEMProblem<dim>::reinit()
     {
       if (mapping_type == "FE")
         mapping = SP(new MappingFEField<dim-1, dim> (gradient_dh, map_vector));
+      else if (mapping_type == "Manifold")
+	      mapping = SP(new MappingManifold<dim-1, dim> );
       else
         mapping = SP(new MappingQ<dim-1, dim> (mapping_degree));
     }
@@ -384,7 +386,7 @@ void BEMProblem<dim>::declare_parameters (ParameterHandler &prm)
   prm.leave_subsection();
 
   prm.declare_entry("Mapping Type","FE",
-                    Patterns::Selection("FE|Q"));
+                    Patterns::Selection("FE|Manifold|Q"));
 
   prm.declare_entry("Mapping Q Degree","1",Patterns::Integer());
 

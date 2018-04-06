@@ -5,6 +5,7 @@
 #include <deal.II/grid/grid_reordering.h>
 #include <deal2lkit/utilities.h>
 
+
 // @sect4{ComputationalDomain::ComputationalDomain and
 // ComputationalDomain::read_parameters}
 // The constructor initializes the
@@ -102,6 +103,9 @@ void ComputationalDomain<dim>::declare_parameters (ParameterHandler &prm)
   prm.declare_entry("Cells per circle", "12",
                     Patterns::Double());
 
+  prm.declare_entry("Type of surface projector", "normal_to_mesh",
+                    Patterns::Selection("normal_to_mesh|nurbs_patch"));
+
   prm.declare_entry("Maximum number of curvature adaptive refinement cycles", "5",
                     Patterns::Integer());
 
@@ -133,7 +137,7 @@ void ComputationalDomain<dim>::parse_parameters (ParameterHandler &prm)
   pre_global_refinements = prm.get_integer("Number of global refinement to be executed before local refinement cycle");
   max_curvature_ref_cycles = prm.get_integer("Maximum number of curvature adaptive refinement cycles");
   cad_to_projectors_tolerance_ratio = prm.get_double("Cad tolerance to projectors tolerance ratio");
-
+  iges_surface_projector = prm.get("Type of surface projector");
   prm.enter_subsection("Boundary Conditions ID Numbers");
   {
     std::vector<std::string> dirichlet_string_list = Utilities::split_string_list(prm.get("Dirichlet boundary ids"));
@@ -579,6 +583,8 @@ void ComputationalDomain<dim>::refine_and_resize(const unsigned int refinement_l
               pcout<<ii<<"-th file exists"<<endl;
               TopoDS_Shape surface = OpenCASCADE::read_IGES(color_filename, 1e-3);
               cad_surfaces.push_back(surface);
+	      TopoDS_Face face = TopoDS::Face(surface);
+	      cad_faces.push_back(face);
             }
           else
             go_on = false;
@@ -627,7 +633,9 @@ void ComputationalDomain<dim>::refine_and_resize(const unsigned int refinement_l
       pcout<<"Used tolerance is: "<<tolerance<<endl;
       for (unsigned int i=0; i<cad_surfaces.size(); ++i)
         {
+	
           normal_to_mesh_projectors.push_back(SP(new OpenCASCADE::NormalToMeshProjectionBoundary<2,3>(cad_surfaces[i], tolerance)));
+          nurbs_patch_projectors.push_back(SP(new OpenCASCADE::NURBSPatchManifold<2,3>(cad_faces[i], tolerance)));
         }
       //static OpenCASCADE::DirectionalProjectionBoundary<2,3>
       //        directional_projector_lat(cad_surfaces[0], Point<3>(0.0,1.0,0.0), tolerance);
@@ -639,10 +647,17 @@ void ComputationalDomain<dim>::refine_and_resize(const unsigned int refinement_l
           line_projectors.push_back(SP(new OpenCASCADE::ArclengthProjectionLineManifold<2,3>(cad_curves[i], tolerance)));
         }
 
+      if(iges_surface_projector == "normal_to_mesh")
       for (unsigned int i=0; i<cad_surfaces.size(); ++i)
         {
           tria.set_manifold(1+i,*normal_to_mesh_projectors[i]);
         }
+      else if(iges_surface_projector == "nurbs_patch")
+      for (unsigned int i=0; i<cad_surfaces.size(); ++i)
+        {
+          tria.set_manifold(1+i,*nurbs_patch_projectors[i]);
+        }
+
 
       for (unsigned int i=0; i<cad_curves.size(); ++i)
         {

@@ -61,6 +61,7 @@
 #include<deal.II/fe/mapping_q1_eulerian.h>
 #include<deal.II/fe/mapping_q1.h>
 #include <deal.II/fe/mapping_fe_field.h>
+#include <deal.II/fe/mapping_manifold.h>
 
 #include<deal.II/numerics/data_out.h>
 #include<deal.II/numerics/vector_tools.h>
