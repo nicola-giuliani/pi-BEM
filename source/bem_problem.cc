@@ -151,7 +151,7 @@ void BEMProblem<dim>::reinit()
       if (mapping_type == "FE")
         mapping = SP(new MappingFEField<dim-1, dim> (gradient_dh, map_vector));
       else if (mapping_type == "Manifold")
-	      mapping = SP(new MappingManifold<dim-1, dim> );
+        mapping = SP(new MappingManifold<dim-1, dim> );
       else
         mapping = SP(new MappingQ<dim-1, dim> (mapping_degree));
     }

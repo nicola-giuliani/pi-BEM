@@ -583,8 +583,8 @@ void ComputationalDomain<dim>::refine_and_resize(const unsigned int refinement_l
               pcout<<ii<<"-th file exists"<<endl;
               TopoDS_Shape surface = OpenCASCADE::read_IGES(color_filename, 1e-3);
               cad_surfaces.push_back(surface);
-	      TopoDS_Face face = TopoDS::Face(surface);
-	      cad_faces.push_back(face);
+              TopoDS_Face face = TopoDS::Face(surface);
+              cad_faces.push_back(face);
             }
           else
             go_on = false;
@@ -633,7 +633,7 @@ void ComputationalDomain<dim>::refine_and_resize(const unsigned int refinement_l
       pcout<<"Used tolerance is: "<<tolerance<<endl;
       for (unsigned int i=0; i<cad_surfaces.size(); ++i)
         {
-	
+
           normal_to_mesh_projectors.push_back(SP(new OpenCASCADE::NormalToMeshProjectionBoundary<2,3>(cad_surfaces[i], tolerance)));
           nurbs_patch_projectors.push_back(SP(new OpenCASCADE::NURBSPatchManifold<2,3>(cad_faces[i], tolerance)));
         }
@@ -647,16 +647,16 @@ void ComputationalDomain<dim>::refine_and_resize(const unsigned int refinement_l
           line_projectors.push_back(SP(new OpenCASCADE::ArclengthProjectionLineManifold<2,3>(cad_curves[i], tolerance)));
         }
 
-      if(iges_surface_projector == "normal_to_mesh")
-      for (unsigned int i=0; i<cad_surfaces.size(); ++i)
-        {
-          tria.set_manifold(1+i,*normal_to_mesh_projectors[i]);
-        }
-      else if(iges_surface_projector == "nurbs_patch")
-      for (unsigned int i=0; i<cad_surfaces.size(); ++i)
-        {
-          tria.set_manifold(1+i,*nurbs_patch_projectors[i]);
-        }
+      if (iges_surface_projector == "normal_to_mesh")
+        for (unsigned int i=0; i<cad_surfaces.size(); ++i)
+          {
+            tria.set_manifold(1+i,*normal_to_mesh_projectors[i]);
+          }
+      else if (iges_surface_projector == "nurbs_patch")
+        for (unsigned int i=0; i<cad_surfaces.size(); ++i)
+          {
+            tria.set_manifold(1+i,*nurbs_patch_projectors[i]);
+          }
 
 
       for (unsigned int i=0; i<cad_curves.size(); ++i)
