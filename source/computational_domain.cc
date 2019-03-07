@@ -583,7 +583,7 @@ void ComputationalDomain<dim>::refine_and_resize(const unsigned int refinement_l
   pcout<<"Refining and resizing mesh as required"<<std::endl;
 
 
-  double max_tol=0;
+  double max_tol=1e-6;
   if (use_cad_surface_and_curves)
     {
       pcout<<"Color Files"<<endl;
